@@ -25,5 +25,36 @@
   "author": {
     "name": "Jon Carlsen",
     "email": "jon.carlsen@icloud.com"
-  }
+  },
+  "drivers": [
+    {
+      "name": {
+        "en": "Nilan HVAC"
+      },
+      "class": "thermostat",
+      "capabilities": [
+        "fan_mode",
+        "thermostat_mode",
+        "target_temperature",
+        "measure_temperature",
+        "measure_temperature_outdoor",
+        "measure_temperature_exhaust",
+        "measure_humidity",
+        "measure_heat_exchanger_efficiency",
+        "nilan_bypass",
+        "alarm_filter_change"
+      ],
+      "capabilitiesOptions": {
+        "measure_heat_exchanger_efficiency": {
+          "title": {
+            "en": "Heat Exchanger Efficiency"
+          },
+          "insights": true,
+          "visibility": {
+            "homepage": true
+          }
+        }
+      }
+    }
+  ]
 }

@@ -42,7 +42,6 @@ interface MQTTSettings {
 
 interface FanSpeedMap {
   [key: string]: string;
-  off: string;
   low: string;
   medium: string;
   high: string;
@@ -59,6 +58,8 @@ interface TopicStructure {
 interface NilanTopics {
   values: {
     temperature: {
+      current: string;
+      target: string;
       controller: string;
       inlet: string;
       outdoor: string;
@@ -106,6 +107,8 @@ class NilanHVACDevice extends Homey.Device {
   private readonly topics: NilanTopics = {
     values: {
       temperature: {
+        current: 'ap/technical/ventilation/temp/T7_Inlet', // Current temperature
+        target: 'ap/technical/ventilation/control/TempSet', // Target temperature state
         controller: 'ap/technical/ventilation/temp/T0_Controller',
         inlet: 'ap/technical/ventilation/temp/T7_Inlet',
         outdoor: 'ap/technical/ventilation/temp/T8_Outdoor',
@@ -134,7 +137,7 @@ class NilanHVACDevice extends Homey.Device {
     },
     commands: {
       mode: 'ap/technical/ventilation/control/ModeSet',
-      temperature: 'ap/technical/ventilation/control/TempSet',
+      temperature: 'convert/tempset', // Command topic for setting temperature
       fan: {
         speed: 'ap/technical/ventilation/ventset',
         power: 'ap/technical/ventilation/runset',
@@ -174,10 +177,16 @@ class NilanHVACDevice extends Homey.Device {
       // HA uses multiply(0.01) for fan speed percentage
       fromDevice: (value: string): number => parseFloat(value) * 0.01,
     },
+    efficiency: {
+      // Convert raw value (0-10000) to percentage (0-100)
+      fromDevice: (value: string): number => {
+        const rawValue = parseFloat(value);
+        return Math.round(rawValue * 0.01); // Convert to percentage and round
+      },
+    },
   };
 
   private readonly fanSpeedMap: FanSpeedMap = {
-    off: '0',
     low: '1',
     medium: '2',
     high: '3',
@@ -185,7 +194,6 @@ class NilanHVACDevice extends Homey.Device {
   };
 
   private readonly fanSpeedMapReverse: { [key: string]: string } = {
-    0: 'off',
     1: 'low',
     2: 'medium',
     3: 'high',
@@ -222,24 +230,28 @@ class NilanHVACDevice extends Homey.Device {
    * Initialize device capabilities and set default values
    */
   private async initializeCapabilities(): Promise<void> {
-    try {
-      const capabilities = [
-        { name: 'fan_mode', defaultValue: 'auto' },
-        { name: 'nilan_bypass', defaultValue: false },
-        { name: 'alarm_filter_change', defaultValue: false },
-        { name: 'measure_humidity', defaultValue: 45 },
-      ];
+    const capabilities = [
+      { name: 'fan_mode', defaultValue: 'auto' },
+      { name: 'nilan_bypass', defaultValue: false },
+      { name: 'alarm_filter_change', defaultValue: false },
+      { name: 'measure_humidity', defaultValue: 45 },
+      { name: 'measure_temperature', defaultValue: 20 },
+      { name: 'measure_temperature_outdoor', defaultValue: 20 },
+      { name: 'measure_temperature_exhaust', defaultValue: 20 },
+      { name: 'measure_heat_exchanger_efficiency', defaultValue: 0 },
+    ];
 
-      for (const cap of capabilities) {
+    for (const cap of capabilities) {
+      try {
         if (!this.hasCapability(cap.name)) {
+          this.log(`Adding missing capability: ${cap.name}`);
           await this.addCapability(cap.name);
-          await this.setCapabilityValue(cap.name, cap.defaultValue);
-          this.log(`Added capability: ${cap.name}`);
         }
+        await this.setCapabilityValueSafe(cap.name, cap.defaultValue);
+      } catch (error) {
+        this.error(`Failed to initialize capability ${cap.name}:`, error);
+        // Continue with other capabilities even if one fails
       }
-    } catch (error) {
-      this.error('Failed to initialize capabilities:', error);
-      throw error;
     }
   }
 
@@ -313,16 +325,25 @@ class NilanHVACDevice extends Homey.Device {
 
   /**
    * Handle target temperature changes
-   * @param value - New temperature value
+   * @param value - New temperature value (10-28°C)
    */
   async onTargetTemperature(value: number): Promise<void> {
     try {
       this.log('Target temperature changed to:', value);
-      await this.setCapabilityValue('target_temperature', value);
+
+      // Validate temperature range
+      if (value < 10 || value > 28) {
+        throw new Error(`Temperature out of range [10-28]: ${value}`);
+      }
 
       if (this.mqttConnected && this.mqttClient) {
-        await this.mqttClient.publish(this.topics.commands.temperature, this.valueConverters.temperature.toDevice(value));
+        // Convert to device format (multiply by 100)
+        const deviceValue = Math.round(value * 100).toString();
+        await this.mqttClient.publish(this.topics.commands.temperature, deviceValue);
+        this.log(`Published to ${this.topics.commands.temperature}: ${deviceValue}`);
       }
+
+      await this.setCapabilityValue('target_temperature', value);
     } catch (error) {
       this.error('Failed to set target temperature:', error);
       throw error;
@@ -348,25 +369,25 @@ class NilanHVACDevice extends Homey.Device {
 
   /**
    * Handle fan mode changes
-   * @param value - Fan mode to set (off/low/medium/high/auto)
    */
-  async onFanMode(value: 'off' | 'low' | 'medium' | 'high' | 'auto'): Promise<void> {
+  async onFanMode(value: 'low' | 'medium' | 'high' | 'auto'): Promise<void> {
     try {
       this.log('Fan mode changed to:', value);
-      await this.setCapabilityValue('fan_mode', value);
 
       if (this.mqttConnected && this.mqttClient) {
-        // Set fan speed
+        // Always set RunSet to 1 (on) when changing speed
+        await this.mqttClient.publish(
+          this.topics.commands.fan.power,
+          '1',
+        );
+
+        // Set the fan speed
         await this.mqttClient.publish(
           this.topics.commands.fan.speed,
           this.fanSpeedMap[value],
         );
 
-        // Set power state (on for any mode except off)
-        await this.mqttClient.publish(
-          this.topics.commands.fan.power,
-          value === 'off' ? '0' : '1',
-        );
+        await this.setCapabilityValue('fan_mode', value);
       }
     } catch (error) {
       this.error('Failed to set fan mode:', error);
@@ -378,8 +399,22 @@ class NilanHVACDevice extends Homey.Device {
    * Handle incoming fan speed messages
    */
   private async handleFanSpeed(value: string): Promise<void> {
-    const mode = this.fanSpeedMapReverse[value] || 'off';
+    // Convert percentage to fan mode
+    const speedPercent = this.valueConverters.fanSpeed.fromDevice(value);
+    let mode: string;
+
+    if (speedPercent <= 25) {
+      mode = 'low';
+    } else if (speedPercent <= 50) {
+      mode = 'medium';
+    } else if (speedPercent <= 75) {
+      mode = 'high';
+    } else {
+      mode = 'auto';
+    }
+
     await this.setCapabilityValue('fan_mode', mode);
+    this.log(`Mapped fan speed ${speedPercent}% to mode: ${mode}`);
   }
 
   /**
@@ -448,6 +483,24 @@ class NilanHVACDevice extends Homey.Device {
   }
 
   /**
+   * Safely set capability value with validation
+   */
+  private async setCapabilityValueSafe(capability: string, value: string | number | boolean): Promise<void> {
+    try {
+      // Check if capability exists
+      if (!this.hasCapability(capability)) {
+        this.error(`Capability ${capability} not found on device`);
+        return;
+      }
+
+      await this.setCapabilityValue(capability, value);
+      this.log(`Updated ${capability} to ${value}`);
+    } catch (error) {
+      this.error(`Failed to set capability ${capability}:`, error);
+    }
+  }
+
+  /**
    * Handle incoming MQTT messages
    */
   private async handleMessage(topic: string, message: Buffer): Promise<void> {
@@ -472,89 +525,99 @@ class NilanHVACDevice extends Homey.Device {
         return num;
       };
 
-      switch (topic) {
-        // Temperature sensors (-50 to 100°C)
-        case this.topics.values.temperature.controller:
-        case this.topics.values.temperature.inlet:
-        case this.topics.values.temperature.outdoor:
-        case this.topics.values.temperature.exhaust:
-        case this.topics.values.temperature.outlet:
-        case this.topics.values.temperature.room: {
-          const temp = validateNumber(value, -50, 100);
-          const convertedTemp = this.valueConverters.temperature.fromDevice(temp.toString());
-          const capability = this.getTemperatureCapability(topic);
-
-          await this.setCapabilityValue(capability, convertedTemp);
-          this.log(`Updated ${capability} to ${convertedTemp}°C`);
-          break;
-        }
-
-        // Humidity (0-100%)
-        case this.topics.values.humidity: {
-          const humidity = validateNumber(value, 0, 100);
-          await this.setCapabilityValue('measure_humidity', humidity);
-          this.log(`Updated humidity to ${humidity}%`);
-          break;
-        }
-
-        // Fan speeds (0-100%)
-        case this.topics.values.fan.inlet:
-        case this.topics.values.fan.exhaust: {
-          const speed = validateNumber(value, 0, 10000); // Raw value is 0-10000
-          const speedPercent = this.valueConverters.fanSpeed.fromDevice(speed.toString());
-          await this.handleFanSpeed(speedPercent.toString());
-          this.log(`Updated fan speed to ${speedPercent}%`);
-          break;
-        }
-
-        // Binary states
-        case this.topics.values.bypass.open:
-        case this.topics.values.bypass.close: {
-          const isOpen = topic.endsWith('open') ? value === '1' : value === '0';
-          await this.setCapabilityValue('nilan_bypass', isOpen);
-          this.log(`Updated bypass state to ${isOpen ? 'open' : 'closed'}`);
-          break;
-        }
-
-        // Filter status
-        case this.topics.values.filter: {
-          const filterChange = value !== '0';
-          await this.setCapabilityValue('alarm_filter_change', filterChange);
-          if (filterChange) {
-            this.log('Filter change required!');
-            // Trigger flow card
-            await this.homey.flow.getDeviceTriggerCard('filter_change_required')
-              .trigger(this, {}, {});
+      try {
+        switch (topic) {
+          // Temperature sensors (-50 to 100°C)
+          case this.topics.values.temperature.controller:
+          case this.topics.values.temperature.inlet:
+          case this.topics.values.temperature.outdoor:
+          case this.topics.values.temperature.exhaust:
+          case this.topics.values.temperature.outlet:
+          case this.topics.values.temperature.room: {
+            const temp = validateNumber(value, -50, 100);
+            const convertedTemp = this.valueConverters.temperature.fromDevice(temp.toString());
+            const capability = this.getTemperatureCapability(topic);
+            await this.setCapabilityValueSafe(capability, convertedTemp);
+            break;
           }
-          break;
-        }
 
-        // Operation mode
-        case this.topics.values.mode: {
-          if (!['0', '1', '2', '3'].includes(value)) {
-            throw new Error(`Invalid mode value: ${value}`);
+          // Humidity (0-100%)
+          case this.topics.values.humidity: {
+            const humidity = validateNumber(value, 0, 100);
+            await this.setCapabilityValueSafe('measure_humidity', humidity);
+            break;
           }
-          const mode = this.valueConverters.mode.fromDevice(value);
-          await this.setCapabilityValue('thermostat_mode', mode);
-          this.log(`Updated thermostat mode to ${mode}`);
-          break;
-        }
 
-        // Efficiency (0-100%)
-        case this.topics.values.efficiency: {
-          const efficiency = validateNumber(value, 0, 10000); // Raw value is 0-10000
-          const efficiencyPercent = this.valueConverters.fanSpeed.fromDevice(efficiency.toString());
-          await this.setCapabilityValue('measure_heat_exchanger_efficiency', efficiencyPercent);
-          this.log(`Updated efficiency to ${efficiencyPercent}%`);
-          break;
-        }
+          // Fan speeds (0-100%)
+          case this.topics.values.fan.inlet:
+          case this.topics.values.fan.exhaust: {
+            const speed = validateNumber(value, 0, 10000); // Raw value is 0-10000
+            const speedPercent = this.valueConverters.fanSpeed.fromDevice(speed.toString());
+            await this.handleFanSpeed(speedPercent.toString());
+            break;
+          }
 
-        default:
-          this.log(`Unhandled topic: ${topic} with value: ${value}`);
+          // Binary states
+          case this.topics.values.bypass.open:
+          case this.topics.values.bypass.close: {
+            const isOpen = topic.endsWith('open') ? value === '1' : value === '0';
+            await this.setCapabilityValueSafe('nilan_bypass', isOpen);
+            break;
+          }
+
+          // Filter status
+          case this.topics.values.filter: {
+            const filterChange = value !== '0';
+            await this.setCapabilityValueSafe('alarm_filter_change', filterChange);
+            if (filterChange) {
+              this.log('Filter change required!');
+              // Trigger flow card
+              await this.homey.flow.getDeviceTriggerCard('filter_change_required')
+                .trigger(this, {}, {});
+            }
+            break;
+          }
+
+          // Operation mode
+          case this.topics.values.mode: {
+            if (!['0', '1', '2', '3'].includes(value)) {
+              throw new Error(`Invalid mode value: ${value}`);
+            }
+            const mode = this.valueConverters.mode.fromDevice(value);
+            await this.setCapabilityValueSafe('thermostat_mode', mode);
+            break;
+          }
+
+          // Efficiency (0-100%)
+          case this.topics.values.efficiency: {
+            // Validate raw value but we only use the converted value
+            validateNumber(value, 0, 15000); // Allow margin for raw values
+            const efficiencyPercent = this.valueConverters.efficiency.fromDevice(value);
+            await this.setCapabilityValueSafe('measure_heat_exchanger_efficiency', efficiencyPercent);
+            break;
+          }
+
+          // Target temperature state
+          case this.topics.values.temperature.target: {
+            const temp = parseFloat(value);
+            if (!Number.isNaN(temp)) { // Use Number.isNaN instead of isNaN
+              // Convert from device format (divide by 100)
+              const targetTemp = Math.round(temp * 0.01 * 10) / 10; // Round to 1 decimal
+              await this.setCapabilityValueSafe('target_temperature', targetTemp);
+            }
+            break;
+          }
+
+          default:
+            this.log(`Unhandled topic: ${topic} with value: ${value}`);
+        }
+      } catch (error) {
+        // Handle specific message processing errors
+        this.error(`Failed to process message for topic ${topic}:`, error);
       }
     } catch (error) {
-      this.error(`Failed to handle MQTT message for topic ${topic}:`, error);
-      // Could add error tracking here for monitoring
+      // Handle general message handling errors
+      this.error('Failed to handle MQTT message:', error);
     }
   }
 
@@ -616,22 +679,28 @@ class NilanHVACDevice extends Homey.Device {
    * Get capability name for temperature topic
    */
   private getTemperatureCapability(topic: string): string {
-    if (topic.includes('controller')) {
-      return 'measure_temperature_controller';
+    if (topic.includes('T7_Inlet')) {
+      return 'measure_temperature'; // Main temperature
     }
-    if (topic.includes('inlet')) {
-      return 'measure_temperature_inlet';
-    }
-    if (topic.includes('outdoor')) {
+    if (topic.includes('T8_Outdoor')) {
       return 'measure_temperature_outdoor';
     }
-    if (topic.includes('exhaust')) {
+    if (topic.includes('T3_Exhaust')) {
       return 'measure_temperature_exhaust';
     }
-    if (topic.includes('outlet')) {
-      return 'measure_temperature_outlet';
+    if (topic.includes('T4_Outlet')) {
+      return 'measure_temperature_exhaust'; // Outlet is also exhaust temperature
     }
-    return 'measure_temperature_room';
+    if (topic.includes('T15_Room')) {
+      return 'measure_temperature'; // Room temperature maps to main temperature
+    }
+    if (topic.includes('T0_Controller')) {
+      return 'measure_temperature'; // Controller temp also maps to main temperature
+    }
+
+    // Log unhandled temperature topic but don't throw
+    this.log(`Unmapped temperature topic: ${topic}, defaulting to measure_temperature`);
+    return 'measure_temperature';
   }
 }
 

@@ -420,6 +420,23 @@
         }
       ]
     },
+    "measure_heat_exchanger_efficiency": {
+      "type": "number",
+      "title": {
+        "en": "Heat Exchanger Efficiency"
+      },
+      "insights": true,
+      "uiComponent": "sensor",
+      "getable": true,
+      "setable": false,
+      "units": {
+        "en": "%"
+      },
+      "decimals": 0,
+      "chartType": "spline",
+      "min": 0,
+      "max": 100
+    },
     "measure_humidity": {
       "type": "number",
       "title": {
