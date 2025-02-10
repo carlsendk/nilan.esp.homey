@@ -1,0 +1,20 @@
+{
+  "title": {
+    "en": "Set fan mode"
+  },
+  "hint": {
+    "en": "Set the fan mode to a specific speed"
+  },
+  "args": [
+    {
+      "name": "mode",
+      "type": "dropdown",
+      "values": [
+        { "id": "auto", "title": { "en": "Auto" } },
+        { "id": "low", "title": { "en": "Low" } },
+        { "id": "medium", "title": { "en": "Medium" } },
+        { "id": "high", "title": { "en": "High" } }
+      ]
+    }
+  ]
+} 

@@ -1,0 +1,9 @@
+{
+  "title": {
+    "en": "Bypass was activated"
+  },
+  "hint": {
+    "en": "Triggers when the bypass mode is activated"
+  },
+  "args": []
+} 

@@ -1,0 +1,25 @@
+{
+  "title": {
+    "en": "Temperature changed"
+  },
+  "hint": {
+    "en": "Triggers when a temperature crosses a threshold"
+  },
+  "args": [
+    {
+      "name": "sensor",
+      "type": "dropdown",
+      "values": [
+        { "id": "indoor", "title": { "en": "Indoor" } },
+        { "id": "outdoor", "title": { "en": "Outdoor" } },
+        { "id": "exhaust", "title": { "en": "Exhaust" } }
+      ]
+    },
+    {
+      "name": "threshold",
+      "type": "number",
+      "title": { "en": "Temperature" },
+      "placeholder": { "en": "20" }
+    }
+  ]
+} 

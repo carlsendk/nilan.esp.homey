@@ -2,6 +2,28 @@
 
 const Homey = require('homey');
 
+// Add these interfaces at the top of the file
+interface FlowCardTriggerArgs {
+  sensor?: 'indoor' | 'outdoor' | 'exhaust';
+  threshold?: number;
+}
+
+interface FlowCardConditionArgs {
+  mode?: 'auto' | 'low' | 'medium' | 'high';
+}
+
+interface FlowCardActionArgs {
+  mode: 'auto' | 'low' | 'medium' | 'high';
+}
+
+interface TemperatureState {
+  sensor: 'indoor' | 'outdoor' | 'exhaust';
+  temperature: number;
+}
+
+// Empty interface for states that don't need data
+interface EmptyState {}
+
 /**
  * Nilan HVAC Device implementation
  */
@@ -26,6 +48,37 @@ class NilanHVACDevice extends Homey.Device {
 
     await this.initializeCapabilities();
     this.startMockUpdates();
+
+    // Register flow card triggers with proper types and null checks
+    this.homey.flow.getDeviceTriggerCard('bypass_activated')
+      .registerRunListener((args: FlowCardTriggerArgs, state: EmptyState) => {
+        return true;
+      });
+
+    this.homey.flow.getDeviceTriggerCard('temperature_threshold')
+      .registerRunListener((args: FlowCardTriggerArgs, state: TemperatureState) => {
+        if (typeof args.threshold === 'undefined') return false;
+        return state.temperature >= args.threshold;
+      });
+
+    // Register conditions with proper types and null checks
+    this.homey.flow.getConditionCard('is_bypass_active')
+      .registerRunListener(async (args: FlowCardConditionArgs, state: EmptyState) => {
+        return await this.getCapabilityValue('nilan_bypass') === 'true';
+      });
+
+    this.homey.flow.getConditionCard('fan_mode_is')
+      .registerRunListener(async (args: FlowCardConditionArgs, state: EmptyState) => {
+        if (typeof args.mode === 'undefined') return false;
+        return await this.getCapabilityValue('fan_mode') === args.mode;
+      });
+
+    // Register actions with proper types
+    this.homey.flow.getActionCard('set_fan_mode')
+      .registerRunListener(async (args: FlowCardActionArgs, state: EmptyState) => {
+        await this.setCapabilityValue('fan_mode', args.mode);
+        return true;
+      });
   }
 
   /**
@@ -93,6 +146,29 @@ class NilanHVACDevice extends Homey.Device {
         if (filterNeedsChange) {
           await this.homey.flow.triggerDevice('filter_change_required', {}, this);
         }
+
+        // Trigger bypass activated
+        if (bypassActive) {
+          await this.homey.flow.getDeviceTriggerCard('bypass_activated')
+            .trigger(this, {}, {});
+        }
+
+        // Check temperature thresholds
+        const temps = {
+          indoor: await this.getCapabilityValue('measure_temperature'),
+          outdoor: await this.getCapabilityValue('measure_temperature_outdoor'),
+          exhaust: await this.getCapabilityValue('measure_temperature_exhaust'),
+        };
+
+        // Trigger temperature thresholds with proper types
+        Object.entries(temps).forEach(([sensor, temp]) => {
+          const state: TemperatureState = {
+            sensor: sensor as 'indoor' | 'outdoor' | 'exhaust',
+            temperature: temp,
+          };
+          this.homey.flow.getDeviceTriggerCard('temperature_threshold')
+            .trigger(this, {}, state);
+        });
       } catch (error) {
         this.error('Failed to update device values:', error);
       }

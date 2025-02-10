@@ -1,0 +1,9 @@
+{
+  "title": {
+    "en": "Bypass !{{is|isn't}} active"
+  },
+  "hint": {
+    "en": "Check if bypass is currently active"
+  },
+  "args": []
+} 

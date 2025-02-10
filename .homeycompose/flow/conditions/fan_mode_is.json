@@ -1,0 +1,20 @@
+{
+  "title": {
+    "en": "Fan mode !{{is|isn't}}"
+  },
+  "hint": {
+    "en": "Check current fan mode"
+  },
+  "args": [
+    {
+      "name": "mode",
+      "type": "dropdown",
+      "values": [
+        { "id": "auto", "title": { "en": "Auto" } },
+        { "id": "low", "title": { "en": "Low" } },
+        { "id": "medium", "title": { "en": "Medium" } },
+        { "id": "high", "title": { "en": "High" } }
+      ]
+    }
+  ]
+} 
