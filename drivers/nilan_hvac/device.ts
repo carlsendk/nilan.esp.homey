@@ -50,49 +50,96 @@ interface FanSpeedMap {
 }
 
 /**
+ * Topic structure interface
+ */
+interface TopicStructure {
+  [key: string]: string | TopicStructure;
+}
+
+interface NilanTopics {
+  values: {
+    temperature: {
+      controller: string;
+      inlet: string;
+      outdoor: string;
+      exhaust: string;
+      outlet: string;
+      room: string;
+    };
+    humidity: string;
+    bypass: {
+      open: string;
+      close: string;
+    };
+    filter: string;
+    fan: {
+      inlet: string;
+      exhaust: string;
+      speed: string;
+    };
+    mode: string;
+    run: string;
+    vent: string;
+    tempSet: string;
+    efficiency: string;
+    summerMode: string;
+    userFunc: string;
+  };
+  commands: {
+    mode: string;
+    temperature: string;
+    fan: {
+      speed: string;
+      power: string;
+    };
+    userFunc: string;
+  };
+}
+
+/**
  * Nilan HVAC Device implementation
  * Handles communication with a Nilan HVAC system via MQTT
  */
 class NilanHVACDevice extends Homey.Device {
   private mqttClient: typeof MQTTClient | null = null;
   private mqttConnected = false;
-  private readonly topics = {
+  private readonly topics: NilanTopics = {
     values: {
       temperature: {
-        controller: 'ventilation/temp/T0_Controller',
-        inlet: 'ventilation/temp/T7_Inlet',
-        outdoor: 'ventilation/temp/T8_Outdoor',
-        exhaust: 'ventilation/temp/T3_Exhaust',
-        outlet: 'ventilation/temp/T4_Outlet',
-        room: 'ventilation/temp/T15_Room',
+        controller: 'ap/technical/ventilation/temp/T0_Controller',
+        inlet: 'ap/technical/ventilation/temp/T7_Inlet',
+        outdoor: 'ap/technical/ventilation/temp/T8_Outdoor',
+        exhaust: 'ap/technical/ventilation/temp/T3_Exhaust',
+        outlet: 'ap/technical/ventilation/temp/T4_Outlet',
+        room: 'ap/technical/ventilation/temp/T15_Room',
       },
-      humidity: 'ventilation/humidity/RH',
+      humidity: 'ap/technical/ventilation/humidity/RH',
       bypass: {
-        open: 'ventilation/output/BypassOpen',
-        close: 'ventilation/output/BypassClose',
+        open: 'ap/technical/ventilation/output/BypassOpen',
+        close: 'ap/technical/ventilation/output/BypassClose',
       },
-      filter: 'ventilation/info/AirFilter',
+      filter: 'ap/technical/ventilation/info/AirFilter',
       fan: {
-        inlet: 'ventilation/speed/InletSpeed',
-        exhaust: 'ventilation/speed/ExhaustSpeed',
-        speed: 'ventilation/control/VentSet',
+        inlet: 'ap/technical/ventilation/speed/InletSpeed',
+        exhaust: 'ap/technical/ventilation/speed/ExhaustSpeed',
+        speed: 'ap/technical/ventilation/control/VentSet',
       },
-      mode: 'ventilation/control/ModeSet',
-      run: 'ventilation/control/RunSet',
-      vent: 'ventilation/control/VentSet',
-      tempSet: 'ventilation/control/TempSet',
-      efficiency: 'ventilation/inputairtemp/EffPct',
-      summerMode: 'ventilation/inputairtemp/IsSummer',
-      userFunc: 'ventilation/user/UserFuncAct',
+      mode: 'ap/technical/ventilation/control/ModeSet',
+      run: 'ap/technical/ventilation/control/RunSet',
+      vent: 'ap/technical/ventilation/control/VentSet',
+      tempSet: 'ap/technical/ventilation/control/TempSet',
+      efficiency: 'ap/technical/ventilation/inputairtemp/EffPct',
+      summerMode: 'ap/technical/ventilation/inputairtemp/IsSummer',
+      userFunc: 'ap/technical/ventilation/user/UserFuncAct',
     },
     commands: {
-      mode: 'ventilation/control/ModeSet',
-      temperature: 'ventilation/control/TempSet',
+      mode: 'ap/technical/ventilation/control/ModeSet',
+      temperature: 'ap/technical/ventilation/control/TempSet',
       fan: {
-        speed: 'ventilation/control/VentSet',
-        power: 'ventilation/control/RunSet',
+        speed: 'ap/technical/ventilation/ventset',
+        power: 'ap/technical/ventilation/runset',
       },
-      userFunc: 'ventilation/user/UserFuncSet',
+      userFunc: 'ap/technical/ventilation/user/UserFuncSet',
     },
   };
 
@@ -101,19 +148,30 @@ class NilanHVACDevice extends Homey.Device {
     mode: {
       toDevice: (mode: string): string => {
         const modes: Record<string, string> = {
-          off: '0', heat: '1', cool: '2', auto: '3',
+          off: '0',
+          heat: '1',
+          cool: '2',
+          auto: '3',
         };
         return modes[mode] || '0';
       },
       fromDevice: (value: string): string => {
-        const modes: Record<number, string> = {
-          0: 'off', 1: 'heat', 2: 'cool', 3: 'auto',
+        const modes: Record<string, string> = {
+          0: 'off',
+          1: 'heat',
+          2: 'cool',
+          3: 'auto',
         };
-        return modes[parseInt(value, 10)] || 'off';
+        return modes[value] || 'off';
       },
     },
     temperature: {
+      // HA uses multiply(0.01) for temperature values
       toDevice: (value: number): string => Math.round(value * 100).toString(),
+      fromDevice: (value: string): number => parseFloat(value) * 0.01,
+    },
+    fanSpeed: {
+      // HA uses multiply(0.01) for fan speed percentage
       fromDevice: (value: string): number => parseFloat(value) * 0.01,
     },
   };
@@ -349,9 +407,12 @@ class NilanHVACDevice extends Homey.Device {
 
       await this.mqttClient.connect();
       this.mqttConnected = true;
+      this.log('MQTT connected, subscribing to topics...');
       await this.subscribeToTopics();
+      this.log('Successfully subscribed to all topics');
     } catch (error) {
       this.mqttConnected = false;
+      this.error('MQTT initialization failed:', error);
       throw error;
     }
   }
@@ -362,11 +423,28 @@ class NilanHVACDevice extends Homey.Device {
    */
   private async subscribeToTopics() {
     if (!this.mqttClient) return;
+    const allTopics = this.getAllTopics(this.topics.values);
 
-    const valueTopics = Object.values(this.topics.values).flat();
-    for (const topic of valueTopics) {
+    for (const topic of allTopics) {
       await this.mqttClient.subscribe(topic);
+      this.log(`Subscribed to topic: ${topic}`); // Add logging
     }
+  }
+
+  /**
+   * Get all topics from nested object
+   * @param obj - Nested topic structure
+   * @returns Array of topic strings
+   */
+  private getAllTopics(obj: TopicStructure): string[] {
+    return Object.entries(obj).reduce<string[]>((topics, [_, value]) => {
+      if (typeof value === 'string') {
+        topics.push(value);
+      } else {
+        topics.push(...this.getAllTopics(value));
+      }
+      return topics;
+    }, []);
   }
 
   /**
@@ -377,81 +455,106 @@ class NilanHVACDevice extends Homey.Device {
       const value = message.toString();
       this.log(`Received MQTT message - Topic: ${topic}, Value: ${value}`);
 
+      // Basic validation
       if (!value || value.trim() === '') {
         throw new Error(`Empty value received for topic: ${topic}`);
       }
 
+      // Value validation helper
+      const validateNumber = (val: string, min: number, max: number): number => {
+        const num = parseFloat(val);
+        if (Number.isNaN(num)) {
+          throw new Error(`Invalid number value: ${val}`);
+        }
+        if (num < min || num > max) {
+          throw new Error(`Value out of range [${min}-${max}]: ${num}`);
+        }
+        return num;
+      };
+
       switch (topic) {
+        // Temperature sensors (-50 to 100°C)
         case this.topics.values.temperature.controller:
-          await this.setCapabilityValue('measure_temperature_controller', this.valueConverters.temperature.fromDevice(value));
-          break;
         case this.topics.values.temperature.inlet:
-          await this.setCapabilityValue('measure_temperature_inlet', this.valueConverters.temperature.fromDevice(value));
-          break;
         case this.topics.values.temperature.outdoor:
-          await this.setCapabilityValue('measure_temperature_outdoor', this.valueConverters.temperature.fromDevice(value));
-          break;
         case this.topics.values.temperature.exhaust:
-          await this.setCapabilityValue('measure_temperature_exhaust', this.valueConverters.temperature.fromDevice(value));
-          break;
         case this.topics.values.temperature.outlet:
-          await this.setCapabilityValue('measure_temperature_outlet', this.valueConverters.temperature.fromDevice(value));
+        case this.topics.values.temperature.room: {
+          const temp = validateNumber(value, -50, 100);
+          const convertedTemp = this.valueConverters.temperature.fromDevice(temp.toString());
+          const capability = this.getTemperatureCapability(topic);
+
+          await this.setCapabilityValue(capability, convertedTemp);
+          this.log(`Updated ${capability} to ${convertedTemp}°C`);
           break;
-        case this.topics.values.temperature.room:
-          await this.setCapabilityValue('measure_temperature_room', this.valueConverters.temperature.fromDevice(value));
+        }
+
+        // Humidity (0-100%)
+        case this.topics.values.humidity: {
+          const humidity = validateNumber(value, 0, 100);
+          await this.setCapabilityValue('measure_humidity', humidity);
+          this.log(`Updated humidity to ${humidity}%`);
           break;
-        case this.topics.values.humidity:
-          await this.setCapabilityValue('measure_humidity', parseFloat(value));
+        }
+
+        // Fan speeds (0-100%)
+        case this.topics.values.fan.inlet:
+        case this.topics.values.fan.exhaust: {
+          const speed = validateNumber(value, 0, 10000); // Raw value is 0-10000
+          const speedPercent = this.valueConverters.fanSpeed.fromDevice(speed.toString());
+          await this.handleFanSpeed(speedPercent.toString());
+          this.log(`Updated fan speed to ${speedPercent}%`);
           break;
+        }
+
+        // Binary states
         case this.topics.values.bypass.open:
-          await this.setCapabilityValue('nilan_bypass', true);
+        case this.topics.values.bypass.close: {
+          const isOpen = topic.endsWith('open') ? value === '1' : value === '0';
+          await this.setCapabilityValue('nilan_bypass', isOpen);
+          this.log(`Updated bypass state to ${isOpen ? 'open' : 'closed'}`);
           break;
-        case this.topics.values.bypass.close:
-          await this.setCapabilityValue('nilan_bypass', false);
-          break;
+        }
+
+        // Filter status
         case this.topics.values.filter: {
           const filterChange = value !== '0';
           await this.setCapabilityValue('alarm_filter_change', filterChange);
-          break;
-        }
-        case this.topics.values.fan.inlet:
-          await this.handleFanSpeed(value);
-          break;
-        case this.topics.values.fan.exhaust:
-          await this.handleFanSpeed(value);
-          break;
-        case this.topics.values.mode:
-          await this.setCapabilityValue('thermostat_mode', this.valueConverters.mode.fromDevice(value));
-          break;
-        case this.topics.values.run:
-          // If system is off, set fan mode to off regardless of speed
-          if (value === '0') {
-            await this.setCapabilityValue('fan_mode', 'off');
+          if (filterChange) {
+            this.log('Filter change required!');
+            // Trigger flow card
+            await this.homey.flow.getDeviceTriggerCard('filter_change_required')
+              .trigger(this, {}, {});
           }
           break;
-        case this.topics.values.vent:
-          await this.setCapabilityValue('target_temperature', this.valueConverters.temperature.fromDevice(value));
+        }
+
+        // Operation mode
+        case this.topics.values.mode: {
+          if (!['0', '1', '2', '3'].includes(value)) {
+            throw new Error(`Invalid mode value: ${value}`);
+          }
+          const mode = this.valueConverters.mode.fromDevice(value);
+          await this.setCapabilityValue('thermostat_mode', mode);
+          this.log(`Updated thermostat mode to ${mode}`);
           break;
-        case this.topics.values.tempSet:
-          await this.setCapabilityValue('target_temperature', this.valueConverters.temperature.fromDevice(value));
+        }
+
+        // Efficiency (0-100%)
+        case this.topics.values.efficiency: {
+          const efficiency = validateNumber(value, 0, 10000); // Raw value is 0-10000
+          const efficiencyPercent = this.valueConverters.fanSpeed.fromDevice(efficiency.toString());
+          await this.setCapabilityValue('measure_heat_exchanger_efficiency', efficiencyPercent);
+          this.log(`Updated efficiency to ${efficiencyPercent}%`);
           break;
-        case this.topics.values.efficiency:
-          await this.setCapabilityValue('measure_heat_exchanger_efficiency', parseFloat(value));
-          break;
-        case this.topics.values.summerMode:
-          await this.setCapabilityValue('measure_summer_mode', value === '1');
-          break;
-        case this.topics.values.userFunc:
-          await this.setCapabilityValue('measure_user_function_active', value === '1');
-          break;
-        case this.topics.values.fan.speed:
-          await this.handleFanSpeed(value);
-          break;
+        }
+
         default:
-          this.log(`Unhandled topic: ${topic}`);
+          this.log(`Unhandled topic: ${topic} with value: ${value}`);
       }
     } catch (error) {
-      this.error('Failed to handle MQTT message:', error);
+      this.error(`Failed to handle MQTT message for topic ${topic}:`, error);
+      // Could add error tracking here for monitoring
     }
   }
 
@@ -507,6 +610,28 @@ class NilanHVACDevice extends Homey.Device {
     if (this.mqttClient) {
       await this.mqttClient.publish(opts.topic, value.toString());
     }
+  }
+
+  /**
+   * Get capability name for temperature topic
+   */
+  private getTemperatureCapability(topic: string): string {
+    if (topic.includes('controller')) {
+      return 'measure_temperature_controller';
+    }
+    if (topic.includes('inlet')) {
+      return 'measure_temperature_inlet';
+    }
+    if (topic.includes('outdoor')) {
+      return 'measure_temperature_outdoor';
+    }
+    if (topic.includes('exhaust')) {
+      return 'measure_temperature_exhaust';
+    }
+    if (topic.includes('outlet')) {
+      return 'measure_temperature_outlet';
+    }
+    return 'measure_temperature_room';
   }
 }
 
