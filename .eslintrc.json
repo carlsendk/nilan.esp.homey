@@ -1,0 +1,15 @@
+{
+  "extends": "athom/homey-app",
+  "plugins": ["jsdoc"],
+  "rules": {
+    "require-await": "error",
+    "padded-blocks": ["error", "never"],
+    "jsdoc/require-jsdoc": ["error", {
+      "require": {
+        "FunctionDeclaration": true,
+        "MethodDefinition": true,
+        "ClassDeclaration": true
+      }
+    }]
+  }
+}

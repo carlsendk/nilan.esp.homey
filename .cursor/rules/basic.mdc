@@ -1,0 +1,25 @@
+---
+description: Rule
+globs: *
+---
+Common TypeScript/Homey Issues to Watch:
+
+1. Module Resolution:
+   - Always set "moduleResolution": "node16" in tsconfig.json
+   - Use require() instead of import for Homey modules
+   - Keep module settings consistent with @tsconfig/node16
+
+2. Type Safety:
+   - Define explicit types for capability values
+   - Use union types for enum-like values
+   - Handle null/undefined cases
+
+3. Common Errors:
+   - Cannot find name 'X': Define or import missing functions/types
+   - Option 'moduleResolution' must be set: Update tsconfig.json
+   - Parameter implicitly has 'any' type: Add explicit type annotations
+
+4. Best Practices:
+   - Use strict TypeScript checks
+   - Define proper return types
+   - Handle all possible capability values

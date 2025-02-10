@@ -1,0 +1,21 @@
+{
+  "drivers": {
+    "nilan_hvac": {
+      "name": "Nilan HVAC",
+      "capabilities": {
+        "target_temperature": {
+          "title": "Target Temperature"
+        },
+        "measure_temperature": {
+          "title": "Current Temperature"
+        },
+        "thermostat_mode": {
+          "title": "Mode"
+        },
+        "fan_speed": {
+          "title": "Fan Speed"
+        }
+      }
+    }
+  }
+}

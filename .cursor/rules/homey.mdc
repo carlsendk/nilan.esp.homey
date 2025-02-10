@@ -1,0 +1,109 @@
+---
+description: Homey App rulse
+globs: *.json,*.ts,*md
+---
+
+1. **Project Structure**
+   - `/drivers` - Device drivers
+   - `/lib` - Shared utilities and helpers
+   - `/locales` - Translations (at least en.json)
+   - `app.js` - Main app file
+   - `app.json` - App manifest
+   - `.homeycompose` - For capability compositions
+
+2. **Homey-Specific Patterns**
+   - Extend core Homey classes (`App`, `Driver`, `Device`)
+   - Use appropriate managers (e.g., `ManagerDrivers`, `ManagerFlow`)
+   - Implement proper device capabilities
+   - Handle Flow cards correctly
+   - Follow Homey's lifecycle methods
+
+3. **Code Organization**
+   - Modular driver implementation
+   - Separate concerns between App, Driver, and Device classes
+   - Utility functions in separate files
+   - Clear separation of device communication logic
+
+4. **Type Safety & Documentation**
+   - Use TypeScript when possible
+   - Document all methods with JSDoc comments
+   - Include capability descriptions
+   - Maintain clear README with setup instructions
+
+5. **Error Handling & Logging**
+   - Use `homey.error()` and `homey.log()`
+   - Implement proper device error states
+   - Handle network failures gracefully
+   - Include debug modes for troubleshooting
+
+6. **Testing & Quality**
+   - Test device communication
+   - Validate Flow card functionality
+   - Test capability implementations
+   - Use ESLint with Athom's config
+
+7. **Best Practices**
+   - Implement proper device cleanup in `onDeleted()`
+   - Use capability debouncing when needed
+   - Handle device unavailability
+   - Implement proper pairing workflows
+
+8. **Development Standards**
+   - Follow Homey's naming conventions
+   - Use async/await for device operations
+   - Implement proper capability listeners
+   - Handle device settings correctly
+
+9. **Security & Performance**
+   - No hardcoded credentials
+   - Proper OAuth2 implementation if needed
+   - Optimize polling intervals
+   - Cache device states appropriately
+
+10. **AI-Friendly Coding**
+    - Descriptive variable names
+    - Clear function purposes
+    - Commented complex logic
+    - Structured error messages
+
+11. **Device Communication Patterns**
+   - WebSocket handling for real-time updates
+   - HTTP request patterns and retry logic
+   - Local network device discovery
+   - Polling vs push updates strategies
+
+12. **Capability Implementation Patterns**
+    - Standard capability mapping templates
+    - Custom capability definitions
+    - Capability value validation
+    - State synchronization patterns
+
+13. **Localization Standards**
+    - Required translation keys structure
+    - Namespace organization
+    - Dynamic value interpolation
+    - DateTime formatting patterns
+
+14. **Settings Management**
+    - Device settings validation
+    - App configuration patterns
+    - Migration handling for settings updates
+    - Default values management
+
+15. **Debug & Support**
+    - Debug data collection patterns
+    - Support report generation
+    - Common troubleshooting flows
+    - Remote debugging approaches
+
+16. **Energy Management**
+    - Energy capability implementations
+    - Power usage tracking
+    - Battery optimization
+    - Solar/grid awareness
+
+17. **Z-Wave/Zigbee Patterns** (if applicable)
+    - Command class implementations
+    - Node interview process
+    - Secure inclusion handling
+    - Mesh network optimization

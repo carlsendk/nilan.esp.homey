@@ -1,0 +1,33 @@
+{
+  "name": {
+    "en": "Nilan HVAC"
+  },
+  "class": "thermostat",
+  "capabilities": [
+    "target_temperature",
+    "measure_temperature",
+    "thermostat_mode",
+    "fan_speed"
+  ],
+  "platforms": [
+    "local"
+  ],
+  "connectivity": ["lan"],
+  "images": {
+    "small": "/drivers/nilan_hvac/assets/images/small.png",
+    "large": "/drivers/nilan_hvac/assets/images/large.png"
+  },
+  "pair": [
+    {
+      "id": "list_devices",
+      "template": "list_devices",
+      "navigation": {
+        "next": "add_devices"
+      }
+    },
+    {
+      "id": "add_devices",
+      "template": "add_devices"
+    }
+  ]
+} 

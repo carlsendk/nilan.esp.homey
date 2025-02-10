@@ -1,0 +1,28 @@
+{
+  "id": "nilan.esp.homey",
+  "version": "1.0.0",
+  "compatibility": ">=5.0.0",
+  "sdk": 3,
+  "platforms": [
+    "local"
+  ],
+  "name": {
+    "en": "Nilan & ESPHOME"
+  },
+  "description": {
+    "en": "Connect to mttq broker and communicate with ESPhome that handle modbus"
+  },
+  "category": [
+    "climate"
+  ],
+  "permissions": [],
+  "images": {
+    "small": "/assets/images/small.png",
+    "large": "/assets/images/large.png",
+    "xlarge": "/assets/images/xlarge.png"
+  },
+  "author": {
+    "name": "Jon Carlsen",
+    "email": "jon.carlsen@icloud.com"
+  }
+}
