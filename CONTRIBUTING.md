@@ -7,7 +7,6 @@ The following is a set of guidelines for contributing to Athom and its packages,
 Please join our [community slack](https://slack.athom.com), if you have not done so already.
 We also have a [community forum](https://community.homey.app) for general discussions.
 
-
 ## Before submitting a bug or feature request
 
 * **Have you actually read the error message**?
@@ -15,7 +14,7 @@ We also have a [community forum](https://community.homey.app) for general discus
 * Have you updated homey, all apps, and the development tools (if applicable)?
 * Have you checked that it's not a problem with one of the apps you're using, rather than Homey itself?
 * Have you looked at what's involved in fixing/implementing this?
- 
+
 Capable programmers should always attempt to investigate and fix problems themselves before asking for others to help. Submit a pull request instead of an issue!
 
 ## A great bug report contains
@@ -43,6 +42,7 @@ Capable programmers should always attempt to investigate and fix problems themse
 * Relevant documentation.
 
 ## Speeding up your pull request
+
 Merging pull requests takes time. While we always try to merge your pull request as soon as possible, there are certain things you can do to speed up this process.
 
 * Ask developers to review your code changes and post their feedback.

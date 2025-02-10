@@ -106,5 +106,49 @@
       "id": "add_devices",
       "template": "add_devices"
     }
+  ],
+  "settings": [
+    {
+      "type": "group",
+      "label": {
+        "en": "MQTT Connection"
+      },
+      "children": [
+        {
+          "id": "mqttHost",
+          "type": "text",
+          "label": {
+            "en": "MQTT Broker Host"
+          },
+          "value": "192.168.1.50"
+        },
+        {
+          "id": "mqttPort",
+          "type": "number",
+          "label": {
+            "en": "MQTT Broker Port"
+          },
+          "value": 1883,
+          "min": 1,
+          "max": 65535
+        },
+        {
+          "id": "mqttUsername",
+          "type": "text",
+          "label": {
+            "en": "Username (optional)"
+          },
+          "value": ""
+        },
+        {
+          "id": "mqttPassword",
+          "type": "password",
+          "label": {
+            "en": "Password (optional)"
+          },
+          "value": ""
+        }
+      ]
+    }
   ]
 } 

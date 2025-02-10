@@ -1,6 +1,7 @@
 'use strict';
 
 const Homey = require('homey');
+const MQTTClient = require('../../lib/mqtt-client');
 
 /**
  * Flow card argument types
@@ -32,17 +33,109 @@ interface TemperatureState {
 /** Empty interface for states that don't need data */
 interface EmptyState {}
 
+interface MQTTSettings {
+  mqttHost: string;
+  mqttPort: number;
+  mqttUsername?: string;
+  mqttPassword?: string;
+}
+
+interface FanSpeedMap {
+  [key: string]: string;
+  off: string;
+  low: string;
+  medium: string;
+  high: string;
+  auto: string;
+}
+
 /**
  * Nilan HVAC Device implementation
  * Handles communication with a Nilan HVAC system via MQTT
  */
 class NilanHVACDevice extends Homey.Device {
-  private updateInterval: NodeJS.Timeout | null = null;
-  private readonly UPDATE_INTERVAL = 30000; // 30 seconds
+  private mqttClient: typeof MQTTClient | null = null;
+  private mqttConnected = false;
+  private readonly topics = {
+    values: {
+      temperature: {
+        controller: 'ventilation/temp/T0_Controller',
+        inlet: 'ventilation/temp/T7_Inlet',
+        outdoor: 'ventilation/temp/T8_Outdoor',
+        exhaust: 'ventilation/temp/T3_Exhaust',
+        outlet: 'ventilation/temp/T4_Outlet',
+        room: 'ventilation/temp/T15_Room',
+      },
+      humidity: 'ventilation/humidity/RH',
+      bypass: {
+        open: 'ventilation/output/BypassOpen',
+        close: 'ventilation/output/BypassClose',
+      },
+      filter: 'ventilation/info/AirFilter',
+      fan: {
+        inlet: 'ventilation/speed/InletSpeed',
+        exhaust: 'ventilation/speed/ExhaustSpeed',
+        speed: 'ventilation/control/VentSet',
+      },
+      mode: 'ventilation/control/ModeSet',
+      run: 'ventilation/control/RunSet',
+      vent: 'ventilation/control/VentSet',
+      tempSet: 'ventilation/control/TempSet',
+      efficiency: 'ventilation/inputairtemp/EffPct',
+      summerMode: 'ventilation/inputairtemp/IsSummer',
+      userFunc: 'ventilation/user/UserFuncAct',
+    },
+    commands: {
+      mode: 'ventilation/control/ModeSet',
+      temperature: 'ventilation/control/TempSet',
+      fan: {
+        speed: 'ventilation/control/VentSet',
+        power: 'ventilation/control/RunSet',
+      },
+      userFunc: 'ventilation/user/UserFuncSet',
+    },
+  };
+
+  // Value conversions from config.yaml
+  private valueConverters = {
+    mode: {
+      toDevice: (mode: string): string => {
+        const modes: Record<string, string> = {
+          off: '0', heat: '1', cool: '2', auto: '3',
+        };
+        return modes[mode] || '0';
+      },
+      fromDevice: (value: string): string => {
+        const modes: Record<number, string> = {
+          0: 'off', 1: 'heat', 2: 'cool', 3: 'auto',
+        };
+        return modes[parseInt(value, 10)] || 'off';
+      },
+    },
+    temperature: {
+      toDevice: (value: number): string => Math.round(value * 100).toString(),
+      fromDevice: (value: string): number => parseFloat(value) * 0.01,
+    },
+  };
+
+  private readonly fanSpeedMap: FanSpeedMap = {
+    off: '0',
+    low: '1',
+    medium: '2',
+    high: '3',
+    auto: '4',
+  };
+
+  private readonly fanSpeedMapReverse: { [key: string]: string } = {
+    0: 'off',
+    1: 'low',
+    2: 'medium',
+    3: 'high',
+    4: 'auto',
+  };
 
   /**
    * Device initialization
-   * Sets up capabilities, flow cards, and starts update polling
    */
   async onInit(): Promise<void> {
     try {
@@ -52,12 +145,18 @@ class NilanHVACDevice extends Homey.Device {
       await this.registerCapabilityListeners();
       await this.registerFlowCards();
 
-      this.startMockUpdates();
+      // Try MQTT connection but don't fail if it doesn't work
+      try {
+        await this.initializeMQTT();
+      } catch (error) {
+        this.error('MQTT connection failed, device will work with limited functionality:', error);
+        // Device can still work without MQTT, just with limited functionality
+      }
 
       this.log('Nilan HVAC device initialized successfully');
     } catch (error) {
       this.error('Failed to initialize device:', error);
-      throw error; // Let Homey know initialization failed
+      throw error;
     }
   }
 
@@ -162,6 +261,10 @@ class NilanHVACDevice extends Homey.Device {
     try {
       this.log('Target temperature changed to:', value);
       await this.setCapabilityValue('target_temperature', value);
+
+      if (this.mqttConnected && this.mqttClient) {
+        await this.mqttClient.publish(this.topics.commands.temperature, this.valueConverters.temperature.toDevice(value));
+      }
     } catch (error) {
       this.error('Failed to set target temperature:', error);
       throw error;
@@ -171,97 +274,239 @@ class NilanHVACDevice extends Homey.Device {
   /**
    * Handle thermostat mode changes
    */
-  async onThermostatMode(value: 'auto' | 'heat' | 'cool') {
-    await this.log('Thermostat mode changed to:', value);
-    await this.setCapabilityValue('thermostat_mode', value);
+  async onThermostatMode(value: 'auto' | 'heat' | 'cool'): Promise<void> {
+    try {
+      await this.log('Thermostat mode changed to:', value);
+      await this.setCapabilityValue('thermostat_mode', value);
+
+      if (this.mqttConnected && this.mqttClient) {
+        await this.mqttClient.publish(this.topics.commands.mode, this.valueConverters.mode.toDevice(value));
+      }
+    } catch (error) {
+      this.error('Failed to set thermostat mode:', error);
+      throw error;
+    }
   }
 
   /**
    * Handle fan mode changes
+   * @param value - Fan mode to set (off/low/medium/high/auto)
    */
-  async onFanMode(value: 'auto' | 'low' | 'medium' | 'high') {
-    await this.log('Fan mode changed to:', value);
-    await this.setCapabilityValue('fan_mode', value);
+  async onFanMode(value: 'off' | 'low' | 'medium' | 'high' | 'auto'): Promise<void> {
+    try {
+      this.log('Fan mode changed to:', value);
+      await this.setCapabilityValue('fan_mode', value);
 
-    // Here you would typically send the command to your actual device
-    // For example:
-    // await this.sendFanModeCommand(value);
+      if (this.mqttConnected && this.mqttClient) {
+        // Set fan speed
+        await this.mqttClient.publish(
+          this.topics.commands.fan.speed,
+          this.fanSpeedMap[value],
+        );
+
+        // Set power state (on for any mode except off)
+        await this.mqttClient.publish(
+          this.topics.commands.fan.power,
+          value === 'off' ? '0' : '1',
+        );
+      }
+    } catch (error) {
+      this.error('Failed to set fan mode:', error);
+      throw error;
+    }
   }
 
   /**
-   * Start mock temperature updates
+   * Handle incoming fan speed messages
    */
-  private startMockUpdates() {
-    if (this.updateInterval) {
-      this.homey.clearInterval(this.updateInterval);
-    }
+  private async handleFanSpeed(value: string): Promise<void> {
+    const mode = this.fanSpeedMapReverse[value] || 'off';
+    await this.setCapabilityValue('fan_mode', mode);
+  }
 
-    this.updateInterval = this.homey.setInterval(async () => {
-      try {
-        // Indoor temperature (existing)
-        const mockTemp = 20 + (Math.random() * 2 - 1);
-        await this.setCapabilityValue('measure_temperature', mockTemp);
+  /**
+   * Initialize MQTT connection
+   */
+  private async initializeMQTT(): Promise<void> {
+    try {
+      const settings = this.getSettings();
 
-        // Outdoor temperature
-        const mockOutdoorTemp = 15 + (Math.random() * 5 - 2.5);
-        await this.setCapabilityValue('measure_temperature_outdoor', mockOutdoorTemp);
-
-        // Exhaust temperature
-        const mockExhaustTemp = 22 + (Math.random() * 3 - 1.5);
-        await this.setCapabilityValue('measure_temperature_exhaust', mockExhaustTemp);
-
-        // Update humidity (mock data)
-        const mockHumidity = Math.floor(40 + (Math.random() * 20)); // Random between 40-60%
-        await this.setCapabilityValue('measure_humidity', mockHumidity);
-
-        // Update bypass status (randomly for mock)
-        const bypassActive = Math.random() > 0.5;
-        await this.setCapabilityValue('nilan_bypass', bypassActive);
-
-        // Update filter status (mock: trigger every 30 days)
-        const now = new Date();
-        const filterNeedsChange = (now.getDate() === 1); // True on first day of month
-        await this.setCapabilityValue('alarm_filter_change', filterNeedsChange);
-        if (filterNeedsChange) {
-          await this.homey.flow.triggerDevice('filter_change_required', {}, this);
-        }
-
-        // Trigger bypass activated
-        if (bypassActive) {
-          await this.homey.flow.getDeviceTriggerCard('bypass_activated')
-            .trigger(this, {}, {});
-        }
-
-        // Check temperature thresholds
-        const temps = {
-          indoor: await this.getCapabilityValue('measure_temperature'),
-          outdoor: await this.getCapabilityValue('measure_temperature_outdoor'),
-          exhaust: await this.getCapabilityValue('measure_temperature_exhaust'),
-        };
-
-        // Trigger temperature thresholds with proper types
-        Object.entries(temps).forEach(([sensor, temp]) => {
-          const state: TemperatureState = {
-            sensor: sensor as 'indoor' | 'outdoor' | 'exhaust',
-            temperature: temp,
-          };
-          this.homey.flow.getDeviceTriggerCard('temperature_threshold')
-            .trigger(this, {}, state);
-        });
-      } catch (error) {
-        this.error('Failed to update device values:', error);
+      // Only try to connect if we have MQTT settings
+      if (!settings.mqttHost) {
+        this.log('No MQTT host configured, skipping connection');
+        return;
       }
-    }, 30000);
+
+      this.mqttClient = new MQTTClient({
+        host: settings.mqttHost,
+        port: settings.mqttPort,
+        username: settings.mqttUsername,
+        password: settings.mqttPassword,
+        clientId: `homey-nilan-${this.getData().id}`,
+      }, this);
+
+      this.mqttClient.on('message', this.handleMessage.bind(this));
+
+      await this.mqttClient.connect();
+      this.mqttConnected = true;
+      await this.subscribeToTopics();
+    } catch (error) {
+      this.mqttConnected = false;
+      throw error;
+    }
+  }
+
+  /**
+   * Subscribe to all configured MQTT topics
+   * @throws Error if subscription fails
+   */
+  private async subscribeToTopics() {
+    if (!this.mqttClient) return;
+
+    const valueTopics = Object.values(this.topics.values).flat();
+    for (const topic of valueTopics) {
+      await this.mqttClient.subscribe(topic);
+    }
+  }
+
+  /**
+   * Handle incoming MQTT messages
+   */
+  private async handleMessage(topic: string, message: Buffer): Promise<void> {
+    try {
+      const value = message.toString();
+      this.log(`Received MQTT message - Topic: ${topic}, Value: ${value}`);
+
+      if (!value || value.trim() === '') {
+        throw new Error(`Empty value received for topic: ${topic}`);
+      }
+
+      switch (topic) {
+        case this.topics.values.temperature.controller:
+          await this.setCapabilityValue('measure_temperature_controller', this.valueConverters.temperature.fromDevice(value));
+          break;
+        case this.topics.values.temperature.inlet:
+          await this.setCapabilityValue('measure_temperature_inlet', this.valueConverters.temperature.fromDevice(value));
+          break;
+        case this.topics.values.temperature.outdoor:
+          await this.setCapabilityValue('measure_temperature_outdoor', this.valueConverters.temperature.fromDevice(value));
+          break;
+        case this.topics.values.temperature.exhaust:
+          await this.setCapabilityValue('measure_temperature_exhaust', this.valueConverters.temperature.fromDevice(value));
+          break;
+        case this.topics.values.temperature.outlet:
+          await this.setCapabilityValue('measure_temperature_outlet', this.valueConverters.temperature.fromDevice(value));
+          break;
+        case this.topics.values.temperature.room:
+          await this.setCapabilityValue('measure_temperature_room', this.valueConverters.temperature.fromDevice(value));
+          break;
+        case this.topics.values.humidity:
+          await this.setCapabilityValue('measure_humidity', parseFloat(value));
+          break;
+        case this.topics.values.bypass.open:
+          await this.setCapabilityValue('nilan_bypass', true);
+          break;
+        case this.topics.values.bypass.close:
+          await this.setCapabilityValue('nilan_bypass', false);
+          break;
+        case this.topics.values.filter: {
+          const filterChange = value !== '0';
+          await this.setCapabilityValue('alarm_filter_change', filterChange);
+          break;
+        }
+        case this.topics.values.fan.inlet:
+          await this.handleFanSpeed(value);
+          break;
+        case this.topics.values.fan.exhaust:
+          await this.handleFanSpeed(value);
+          break;
+        case this.topics.values.mode:
+          await this.setCapabilityValue('thermostat_mode', this.valueConverters.mode.fromDevice(value));
+          break;
+        case this.topics.values.run:
+          // If system is off, set fan mode to off regardless of speed
+          if (value === '0') {
+            await this.setCapabilityValue('fan_mode', 'off');
+          }
+          break;
+        case this.topics.values.vent:
+          await this.setCapabilityValue('target_temperature', this.valueConverters.temperature.fromDevice(value));
+          break;
+        case this.topics.values.tempSet:
+          await this.setCapabilityValue('target_temperature', this.valueConverters.temperature.fromDevice(value));
+          break;
+        case this.topics.values.efficiency:
+          await this.setCapabilityValue('measure_heat_exchanger_efficiency', parseFloat(value));
+          break;
+        case this.topics.values.summerMode:
+          await this.setCapabilityValue('measure_summer_mode', value === '1');
+          break;
+        case this.topics.values.userFunc:
+          await this.setCapabilityValue('measure_user_function_active', value === '1');
+          break;
+        case this.topics.values.fan.speed:
+          await this.handleFanSpeed(value);
+          break;
+        default:
+          this.log(`Unhandled topic: ${topic}`);
+      }
+    } catch (error) {
+      this.error('Failed to handle MQTT message:', error);
+    }
+  }
+
+  /**
+   * Handle device settings changes
+   * @param oldSettings - Previous settings
+   * @param newSettings - New settings
+   * @param changedKeys - List of changed setting keys
+   */
+  async onSettings({ oldSettings, newSettings, changedKeys }: {
+    oldSettings: MQTTSettings;
+    newSettings: MQTTSettings;
+    changedKeys: string[];
+  }): Promise<void> {
+    // Reconnect MQTT if connection settings changed
+    if (changedKeys.some((key) => key.startsWith('mqtt'))) {
+      await this.disconnectMQTT();
+      await this.initializeMQTT();
+    }
+  }
+
+  /**
+   * Disconnect from MQTT broker
+   */
+  private async disconnectMQTT() {
+    if (this.mqttClient) {
+      await this.mqttClient.disconnect();
+      this.mqttClient = null;
+    }
   }
 
   /**
    * Device deleted handler
    */
   async onDeleted() {
-    if (this.updateInterval) {
-      this.homey.clearInterval(this.updateInterval);
-    }
+    await this.disconnectMQTT();
     await this.log('NilanHVAC device deleted');
+  }
+
+  /**
+   * Handle capability changes
+   * @param value - The new value of the capability
+   * @param opts - Options for the capability change
+   */
+  private async onCapabilityChange(value: string | number | boolean, opts: { topic: string }): Promise<void> {
+    // Only try to publish if MQTT is connected
+    if (!this.mqttConnected) {
+      this.log('MQTT not connected, skipping command publish');
+      return; // Exit early if MQTT is not connected
+    }
+
+    // Publish to MQTT if connected
+    if (this.mqttClient) {
+      await this.mqttClient.publish(opts.topic, value.toString());
+    }
   }
 }
 

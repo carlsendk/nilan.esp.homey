@@ -8,7 +8,7 @@
     "local"
   ],
   "name": {
-    "en": "Nilan & ESPHOME"
+    "en": "Nilan"
   },
   "description": {
     "en": "Connect to mttq broker and communicate with ESPhome that handle modbus"

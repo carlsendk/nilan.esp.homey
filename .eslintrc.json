@@ -10,6 +10,9 @@
         "MethodDefinition": true,
         "ClassDeclaration": true
       }
-    }]
+    }],
+    "import/no-unresolved": "off",
+    "import/extensions": "off",
+    "node/no-missing-require": "off"
   }
 }
