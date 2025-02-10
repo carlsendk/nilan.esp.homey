@@ -8,6 +8,8 @@
     "strictNullChecks": true,
     "baseUrl": ".",
     "moduleResolution": "node16",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
     "paths": {
       "*": ["./types/*"]
     },
@@ -18,7 +20,8 @@
   },
   "include": [
     "**/*.ts",
-    "**/*.js"
+    "**/*.js",
+    "**/*.json"
   ],
   "exclude": [
     "node_modules",

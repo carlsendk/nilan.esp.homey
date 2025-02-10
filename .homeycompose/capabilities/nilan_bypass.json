@@ -1,0 +1,25 @@
+{
+  "type": "boolean",
+  "title": {
+    "en": "Bypass"
+  },
+  "getable": true,
+  "setable": false,
+  "insights": true,
+  "uiComponent": "sensor",
+  "icon": "/assets/bypass.svg",
+  "values": [
+    {
+      "id": "true",
+      "title": {
+        "en": "Active"
+      }
+    },
+    {
+      "id": "false",
+      "title": {
+        "en": "Inactive"
+      }
+    }
+  ]
+} 

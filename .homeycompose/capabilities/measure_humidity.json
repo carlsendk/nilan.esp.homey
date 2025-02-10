@@ -1,0 +1,17 @@
+{
+  "type": "number",
+  "title": {
+    "en": "Humidity"
+  },
+  "insights": true,
+  "uiComponent": "sensor",
+  "getable": true,
+  "setable": false,
+  "units": {
+    "en": "%"
+  },
+  "decimals": 0,
+  "chartType": "spline",
+  "min": 0,
+  "max": 100
+} 

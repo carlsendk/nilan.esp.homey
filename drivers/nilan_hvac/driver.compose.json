@@ -9,7 +9,10 @@
     "target_temperature",
     "measure_temperature",
     "measure_temperature_outdoor",
-    "measure_temperature_exhaust"
+    "measure_temperature_exhaust",
+    "measure_humidity",
+    "nilan_bypass",
+    "alarm_filter_change"
   ],
   "capabilitiesOptions": {
     "fan_mode": {
@@ -56,6 +59,27 @@
       }
     },
     "measure_temperature_exhaust": {
+      "insights": true,
+      "visibility": {
+        "homepage": true
+      }
+    },
+    "measure_humidity": {
+      "title": {
+        "en": "Humidity"
+      },
+      "insights": true,
+      "visibility": {
+        "homepage": true
+      }
+    },
+    "nilan_bypass": {
+      "insights": true,
+      "visibility": {
+        "homepage": true
+      }
+    },
+    "alarm_filter_change": {
       "insights": true,
       "visibility": {
         "homepage": true

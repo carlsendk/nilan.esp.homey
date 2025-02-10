@@ -24,6 +24,7 @@ class NilanHVACDevice extends Homey.Device {
     await this.registerCapabilityListener('thermostat_mode', this.onThermostatMode.bind(this));
     await this.registerCapabilityListener('fan_mode', this.onFanMode.bind(this));
 
+    await this.initializeCapabilities();
     this.startMockUpdates();
   }
 
@@ -76,10 +77,47 @@ class NilanHVACDevice extends Homey.Device {
         // Exhaust temperature
         const mockExhaustTemp = 22 + (Math.random() * 3 - 1.5);
         await this.setCapabilityValue('measure_temperature_exhaust', mockExhaustTemp);
+
+        // Update humidity (mock data)
+        const mockHumidity = Math.floor(40 + (Math.random() * 20)); // Random between 40-60%
+        await this.setCapabilityValue('measure_humidity', mockHumidity);
+
+        // Update bypass status (randomly for mock)
+        const bypassActive = Math.random() > 0.5;
+        await this.setCapabilityValue('nilan_bypass', bypassActive);
+
+        // Update filter status (mock: trigger every 30 days)
+        const now = new Date();
+        const filterNeedsChange = (now.getDate() === 1); // True on first day of month
+        await this.setCapabilityValue('alarm_filter_change', filterNeedsChange);
+        if (filterNeedsChange) {
+          await this.homey.flow.triggerDevice('filter_change_required', {}, this);
+        }
       } catch (error) {
-        this.error('Failed to update temperatures:', error);
+        this.error('Failed to update device values:', error);
       }
     }, 30000);
+  }
+
+  /**
+   * Initialize all capabilities
+   */
+  private async initializeCapabilities() {
+    // Existing capability checks...
+    if (!this.hasCapability('nilan_bypass')) {
+      await this.addCapability('nilan_bypass');
+      await this.setCapabilityValue('nilan_bypass', false);
+    }
+
+    if (!this.hasCapability('alarm_filter_change')) {
+      await this.addCapability('alarm_filter_change');
+      await this.setCapabilityValue('alarm_filter_change', false);
+    }
+
+    if (!this.hasCapability('measure_humidity')) {
+      await this.addCapability('measure_humidity');
+      await this.setCapabilityValue('measure_humidity', 45); // Default value
+    }
   }
 
   /**

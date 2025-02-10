@@ -1,0 +1,9 @@
+{
+  "title": {
+    "en": "Filter change is required"
+  },
+  "hint": {
+    "en": "Triggers when the filter needs to be changed"
+  },
+  "args": []
+} 

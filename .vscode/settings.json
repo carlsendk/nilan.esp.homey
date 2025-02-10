@@ -1,0 +1,57 @@
+{
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "javascript.validate.enable": false,
+  "typescript.validate.enable": true,
+  "json.schemas": [
+    {
+      "fileMatch": [
+        "app.json",
+        ".homeycompose/**/*.json"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "version": { "type": "string" },
+          "compatibility": { "type": "string" },
+          "sdk": { "type": "number" },
+          "name": {
+            "type": "object",
+            "properties": {
+              "en": { "type": "string" }
+            }
+          },
+          "description": {
+            "type": "object",
+            "properties": {
+              "en": { "type": "string" }
+            }
+          },
+          "category": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "permissions": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "images": {
+            "type": "object",
+            "properties": {
+              "small": { "type": "string" },
+              "large": { "type": "string" },
+              "xlarge": { "type": "string" }
+            }
+          },
+          "author": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "email": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  ]
+} 

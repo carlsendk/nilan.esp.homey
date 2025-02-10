@@ -1,0 +1,26 @@
+{
+  "type": "boolean",
+  "title": {
+    "en": "Filter Change Required"
+  },
+  "getable": true,
+  "setable": false,
+  "insights": true,
+  "uiComponent": "sensor",
+  "icon": "/assets/filter.svg",
+  "alarm": true,
+  "values": [
+    {
+      "id": "true",
+      "title": {
+        "en": "Change Required"
+      }
+    },
+    {
+      "id": "false",
+      "title": {
+        "en": "OK"
+      }
+    }
+  ]
+} 

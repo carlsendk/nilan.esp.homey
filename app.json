@@ -27,6 +27,20 @@
     "name": "Jon Carlsen",
     "email": "jon.carlsen@icloud.com"
   },
+  "flow": {
+    "triggers": [
+      {
+        "title": {
+          "en": "Filter change is required"
+        },
+        "hint": {
+          "en": "Triggers when the filter needs to be changed"
+        },
+        "args": [],
+        "id": "filter_change_required"
+      }
+    ]
+  },
   "drivers": [
     {
       "name": {
@@ -39,7 +53,10 @@
         "target_temperature",
         "measure_temperature",
         "measure_temperature_outdoor",
-        "measure_temperature_exhaust"
+        "measure_temperature_exhaust",
+        "measure_humidity",
+        "nilan_bypass",
+        "alarm_filter_change"
       ],
       "capabilitiesOptions": {
         "fan_mode": {
@@ -90,6 +107,27 @@
           "visibility": {
             "homepage": true
           }
+        },
+        "measure_humidity": {
+          "title": {
+            "en": "Humidity"
+          },
+          "insights": true,
+          "visibility": {
+            "homepage": true
+          }
+        },
+        "nilan_bypass": {
+          "insights": true,
+          "visibility": {
+            "homepage": true
+          }
+        },
+        "alarm_filter_change": {
+          "insights": true,
+          "visibility": {
+            "homepage": true
+          }
         }
       },
       "platforms": [
@@ -119,6 +157,32 @@
     }
   ],
   "capabilities": {
+    "alarm_filter_change": {
+      "type": "boolean",
+      "title": {
+        "en": "Filter Change Required"
+      },
+      "getable": true,
+      "setable": false,
+      "insights": true,
+      "uiComponent": "sensor",
+      "icon": "/assets/filter.svg",
+      "alarm": true,
+      "values": [
+        {
+          "id": "true",
+          "title": {
+            "en": "Change Required"
+          }
+        },
+        {
+          "id": "false",
+          "title": {
+            "en": "OK"
+          }
+        }
+      ]
+    },
     "fan_mode": {
       "type": "enum",
       "title": {
@@ -161,6 +225,23 @@
         }
       ]
     },
+    "measure_humidity": {
+      "type": "number",
+      "title": {
+        "en": "Humidity"
+      },
+      "insights": true,
+      "uiComponent": "sensor",
+      "getable": true,
+      "setable": false,
+      "units": {
+        "en": "%"
+      },
+      "decimals": 0,
+      "chartType": "spline",
+      "min": 0,
+      "max": 100
+    },
     "measure_temperature_exhaust": {
       "type": "number",
       "title": {
@@ -194,6 +275,31 @@
       "chartType": "spline",
       "min": -50,
       "max": 50
+    },
+    "nilan_bypass": {
+      "type": "boolean",
+      "title": {
+        "en": "Bypass"
+      },
+      "getable": true,
+      "setable": false,
+      "insights": true,
+      "uiComponent": "sensor",
+      "icon": "/assets/bypass.svg",
+      "values": [
+        {
+          "id": "true",
+          "title": {
+            "en": "Active"
+          }
+        },
+        {
+          "id": "false",
+          "title": {
+            "en": "Inactive"
+          }
+        }
+      ]
     }
   }
 }
