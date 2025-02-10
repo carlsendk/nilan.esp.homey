@@ -7,7 +7,9 @@
     "fan_mode",
     "thermostat_mode",
     "target_temperature",
-    "measure_temperature"  
+    "measure_temperature",
+    "measure_temperature_outdoor",
+    "measure_temperature_exhaust"
   ],
   "capabilitiesOptions": {
     "fan_mode": {
@@ -39,8 +41,24 @@
       }
     },
     "measure_temperature": {
+      "title": {
+        "en": "Indoor Temperature"
+      },
+      "insights": true,
       "visibility": {
-        "homepage": false
+        "homepage": true
+      }
+    },
+    "measure_temperature_outdoor": {
+      "insights": true,
+      "visibility": {
+        "homepage": true
+      }
+    },
+    "measure_temperature_exhaust": {
+      "insights": true,
+      "visibility": {
+        "homepage": true
       }
     }
   },

@@ -65,10 +65,19 @@ class NilanHVACDevice extends Homey.Device {
 
     this.updateInterval = this.homey.setInterval(async () => {
       try {
+        // Indoor temperature (existing)
         const mockTemp = 20 + (Math.random() * 2 - 1);
         await this.setCapabilityValue('measure_temperature', mockTemp);
+
+        // Outdoor temperature
+        const mockOutdoorTemp = 15 + (Math.random() * 5 - 2.5);
+        await this.setCapabilityValue('measure_temperature_outdoor', mockOutdoorTemp);
+
+        // Exhaust temperature
+        const mockExhaustTemp = 22 + (Math.random() * 3 - 1.5);
+        await this.setCapabilityValue('measure_temperature_exhaust', mockExhaustTemp);
       } catch (error) {
-        this.error('Failed to update temperature:', error);
+        this.error('Failed to update temperatures:', error);
       }
     }, 30000);
   }

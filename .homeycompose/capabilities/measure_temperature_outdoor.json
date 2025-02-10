@@ -1,0 +1,17 @@
+{
+  "type": "number",
+  "title": {
+    "en": "Outdoor Temperature"
+  },
+  "insights": true,
+  "uiComponent": "sensor",
+  "getable": true,
+  "setable": false,
+  "units": {
+    "en": "°C"
+  },
+  "decimals": 1,
+  "chartType": "spline",
+  "min": -50,
+  "max": 50
+} 
