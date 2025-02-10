@@ -14,9 +14,15 @@ class NilanHVACDevice extends Homey.Device {
   async onInit() {
     await this.log('NilanHVAC device initialized');
 
+    // Set initial values if not set
+    if (!this.hasCapability('fan_mode')) {
+      await this.addCapability('fan_mode');
+      await this.setCapabilityValue('fan_mode', 'auto');
+    }
+
     await this.registerCapabilityListener('target_temperature', this.onTargetTemperature.bind(this));
     await this.registerCapabilityListener('thermostat_mode', this.onThermostatMode.bind(this));
-    await this.registerCapabilityListener('fan_speed', this.onFanSpeed.bind(this));
+    await this.registerCapabilityListener('fan_mode', this.onFanMode.bind(this));
 
     this.startMockUpdates();
   }
@@ -38,11 +44,15 @@ class NilanHVACDevice extends Homey.Device {
   }
 
   /**
-   * Handle fan speed changes
+   * Handle fan mode changes
    */
-  async onFanSpeed(value: 'low' | 'medium' | 'high') {
-    await this.log('Fan speed changed to:', value);
-    await this.setCapabilityValue('fan_speed', value);
+  async onFanMode(value: 'auto' | 'low' | 'medium' | 'high') {
+    await this.log('Fan mode changed to:', value);
+    await this.setCapabilityValue('fan_mode', value);
+
+    // Here you would typically send the command to your actual device
+    // For example:
+    // await this.sendFanModeCommand(value);
   }
 
   /**

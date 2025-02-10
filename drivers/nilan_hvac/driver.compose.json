@@ -4,11 +4,46 @@
   },
   "class": "thermostat",
   "capabilities": [
-    "target_temperature",
-    "measure_temperature",
+    "fan_mode",
     "thermostat_mode",
-    "fan_mode"
+    "target_temperature",
+    "measure_temperature"  
   ],
+  "capabilitiesOptions": {
+    "fan_mode": {
+      "title": {
+        "en": "Fan Mode"
+      },
+      "uiQuickAction": true,
+      "mainControl": true,
+      "priority": 1,
+      "visibility": {
+        "homepage": true,
+        "mobile": true
+      }
+    },
+    "target_temperature": {
+      "uiQuickAction": false,
+      "mainControl": false,
+      "priority": 2,
+      "visibility": {
+        "homepage": false
+      }
+    },
+    "thermostat_mode": {
+      "uiQuickAction": false,
+      "mainControl": false,
+      "priority": 3,
+      "visibility": {
+        "homepage": false
+      }
+    },
+    "measure_temperature": {
+      "visibility": {
+        "homepage": false
+      }
+    }
+  },
   "platforms": [
     "local"
   ],

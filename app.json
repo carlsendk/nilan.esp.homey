@@ -1,7 +1,7 @@
 {
   "_comment": "This file is generated. Please edit .homeycompose/app.json instead.",
   "id": "nilan.esp.homey",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "compatibility": ">=12.2.0",
   "sdk": 3,
   "brandColor": "#FF0000",
@@ -34,11 +34,46 @@
       },
       "class": "thermostat",
       "capabilities": [
-        "target_temperature",
-        "measure_temperature",
+        "fan_mode",
         "thermostat_mode",
-        "fan_mode"
+        "target_temperature",
+        "measure_temperature"
       ],
+      "capabilitiesOptions": {
+        "fan_mode": {
+          "title": {
+            "en": "Fan Mode"
+          },
+          "uiQuickAction": true,
+          "mainControl": true,
+          "priority": 1,
+          "visibility": {
+            "homepage": true,
+            "mobile": true
+          }
+        },
+        "target_temperature": {
+          "uiQuickAction": false,
+          "mainControl": false,
+          "priority": 2,
+          "visibility": {
+            "homepage": false
+          }
+        },
+        "thermostat_mode": {
+          "uiQuickAction": false,
+          "mainControl": false,
+          "priority": 3,
+          "visibility": {
+            "homepage": false
+          }
+        },
+        "measure_temperature": {
+          "visibility": {
+            "homepage": false
+          }
+        }
+      },
       "platforms": [
         "local"
       ],
@@ -74,6 +109,13 @@
       "getable": true,
       "setable": true,
       "uiComponent": "picker",
+      "uiQuickAction": true,
+      "insights": true,
+      "default": "auto",
+      "priority": 1,
+      "icon": "/assets/fan_mode.svg",
+      "chartType": "stepLine",
+      "decimals": 0,
       "values": [
         {
           "id": "auto",

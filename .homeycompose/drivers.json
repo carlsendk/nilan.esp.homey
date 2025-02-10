@@ -1,0 +1,6 @@
+{
+  "class": "hvac",
+  "capabilities": ["fan_mode"],
+  "platforms": ["local"],
+  "connectivity": ["lan"]
+} 

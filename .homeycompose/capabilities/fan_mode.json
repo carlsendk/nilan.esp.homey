@@ -6,6 +6,13 @@
   "getable": true,
   "setable": true,
   "uiComponent": "picker",
+  "uiQuickAction": true,
+  "insights": true,
+  "default": "auto",
+  "priority": 1,
+  "icon": "/assets/fan_mode.svg",
+  "chartType": "stepLine",
+  "decimals": 0,
   "values": [
     {
       "id": "auto",
