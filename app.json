@@ -31,6 +31,16 @@
     "triggers": [
       {
         "title": {
+          "en": "Bypass was activated"
+        },
+        "hint": {
+          "en": "Triggers when the bypass mode is activated"
+        },
+        "args": [],
+        "id": "bypass_activated"
+      },
+      {
+        "title": {
           "en": "Filter change is required"
         },
         "hint": {
@@ -38,6 +48,147 @@
         },
         "args": [],
         "id": "filter_change_required"
+      },
+      {
+        "title": {
+          "en": "Temperature changed"
+        },
+        "hint": {
+          "en": "Triggers when a temperature crosses a threshold"
+        },
+        "args": [
+          {
+            "name": "sensor",
+            "type": "dropdown",
+            "values": [
+              {
+                "id": "indoor",
+                "title": {
+                  "en": "Indoor"
+                }
+              },
+              {
+                "id": "outdoor",
+                "title": {
+                  "en": "Outdoor"
+                }
+              },
+              {
+                "id": "exhaust",
+                "title": {
+                  "en": "Exhaust"
+                }
+              }
+            ]
+          },
+          {
+            "name": "threshold",
+            "type": "number",
+            "title": {
+              "en": "Temperature"
+            },
+            "placeholder": {
+              "en": "20"
+            }
+          }
+        ],
+        "id": "temperature_threshold"
+      }
+    ],
+    "conditions": [
+      {
+        "title": {
+          "en": "Fan mode !{{is|isn't}}"
+        },
+        "hint": {
+          "en": "Check current fan mode"
+        },
+        "args": [
+          {
+            "name": "mode",
+            "type": "dropdown",
+            "values": [
+              {
+                "id": "auto",
+                "title": {
+                  "en": "Auto"
+                }
+              },
+              {
+                "id": "low",
+                "title": {
+                  "en": "Low"
+                }
+              },
+              {
+                "id": "medium",
+                "title": {
+                  "en": "Medium"
+                }
+              },
+              {
+                "id": "high",
+                "title": {
+                  "en": "High"
+                }
+              }
+            ]
+          }
+        ],
+        "id": "fan_mode_is"
+      },
+      {
+        "title": {
+          "en": "Bypass !{{is|isn't}} active"
+        },
+        "hint": {
+          "en": "Check if bypass is currently active"
+        },
+        "args": [],
+        "id": "is_bypass_active"
+      }
+    ],
+    "actions": [
+      {
+        "title": {
+          "en": "Set fan mode"
+        },
+        "hint": {
+          "en": "Set the fan mode to a specific speed"
+        },
+        "args": [
+          {
+            "name": "mode",
+            "type": "dropdown",
+            "values": [
+              {
+                "id": "auto",
+                "title": {
+                  "en": "Auto"
+                }
+              },
+              {
+                "id": "low",
+                "title": {
+                  "en": "Low"
+                }
+              },
+              {
+                "id": "medium",
+                "title": {
+                  "en": "Medium"
+                }
+              },
+              {
+                "id": "high",
+                "title": {
+                  "en": "High"
+                }
+              }
+            ]
+          }
+        ],
+        "id": "set_fan_mode"
       }
     ]
   },

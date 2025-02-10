@@ -2,91 +2,170 @@
 
 const Homey = require('homey');
 
-// Add these interfaces at the top of the file
+/**
+ * Flow card argument types
+ */
 interface FlowCardTriggerArgs {
+  /** Selected temperature sensor (indoor/outdoor/exhaust) */
   sensor?: 'indoor' | 'outdoor' | 'exhaust';
+  /** Temperature threshold value */
   threshold?: number;
 }
 
 interface FlowCardConditionArgs {
+  /** Fan mode selection */
   mode?: 'auto' | 'low' | 'medium' | 'high';
 }
 
 interface FlowCardActionArgs {
+  /** Fan mode to set */
   mode: 'auto' | 'low' | 'medium' | 'high';
 }
 
 interface TemperatureState {
+  /** Which temperature sensor triggered the event */
   sensor: 'indoor' | 'outdoor' | 'exhaust';
+  /** Current temperature value */
   temperature: number;
 }
 
-// Empty interface for states that don't need data
+/** Empty interface for states that don't need data */
 interface EmptyState {}
 
 /**
  * Nilan HVAC Device implementation
+ * Handles communication with a Nilan HVAC system via MQTT
  */
 class NilanHVACDevice extends Homey.Device {
-  private updateInterval = null;
+  private updateInterval: NodeJS.Timeout | null = null;
+  private readonly UPDATE_INTERVAL = 30000; // 30 seconds
 
   /**
    * Device initialization
+   * Sets up capabilities, flow cards, and starts update polling
    */
-  async onInit() {
-    await this.log('NilanHVAC device initialized');
+  async onInit(): Promise<void> {
+    try {
+      this.log('Initializing Nilan HVAC device');
 
-    // Set initial values if not set
-    if (!this.hasCapability('fan_mode')) {
-      await this.addCapability('fan_mode');
-      await this.setCapabilityValue('fan_mode', 'auto');
+      await this.initializeCapabilities();
+      await this.registerCapabilityListeners();
+      await this.registerFlowCards();
+
+      this.startMockUpdates();
+
+      this.log('Nilan HVAC device initialized successfully');
+    } catch (error) {
+      this.error('Failed to initialize device:', error);
+      throw error; // Let Homey know initialization failed
     }
+  }
 
-    await this.registerCapabilityListener('target_temperature', this.onTargetTemperature.bind(this));
-    await this.registerCapabilityListener('thermostat_mode', this.onThermostatMode.bind(this));
-    await this.registerCapabilityListener('fan_mode', this.onFanMode.bind(this));
+  /**
+   * Initialize device capabilities and set default values
+   */
+  private async initializeCapabilities(): Promise<void> {
+    try {
+      const capabilities = [
+        { name: 'fan_mode', defaultValue: 'auto' },
+        { name: 'nilan_bypass', defaultValue: false },
+        { name: 'alarm_filter_change', defaultValue: false },
+        { name: 'measure_humidity', defaultValue: 45 },
+      ];
 
-    await this.initializeCapabilities();
-    this.startMockUpdates();
+      for (const cap of capabilities) {
+        if (!this.hasCapability(cap.name)) {
+          await this.addCapability(cap.name);
+          await this.setCapabilityValue(cap.name, cap.defaultValue);
+          this.log(`Added capability: ${cap.name}`);
+        }
+      }
+    } catch (error) {
+      this.error('Failed to initialize capabilities:', error);
+      throw error;
+    }
+  }
 
-    // Register flow card triggers with proper types and null checks
-    this.homey.flow.getDeviceTriggerCard('bypass_activated')
-      .registerRunListener((args: FlowCardTriggerArgs, state: EmptyState) => {
-        return true;
-      });
+  /**
+   * Register capability listeners for user interactions
+   */
+  private async registerCapabilityListeners(): Promise<void> {
+    try {
+      await this.registerCapabilityListener('target_temperature', this.onTargetTemperature.bind(this));
+      await this.registerCapabilityListener('thermostat_mode', this.onThermostatMode.bind(this));
+      await this.registerCapabilityListener('fan_mode', this.onFanMode.bind(this));
+    } catch (error) {
+      this.error('Failed to register capability listeners:', error);
+      throw error;
+    }
+  }
 
-    this.homey.flow.getDeviceTriggerCard('temperature_threshold')
-      .registerRunListener((args: FlowCardTriggerArgs, state: TemperatureState) => {
-        if (typeof args.threshold === 'undefined') return false;
-        return state.temperature >= args.threshold;
-      });
+  /**
+   * Register flow cards for automation
+   */
+  private async registerFlowCards(): Promise<void> {
+    try {
+      // Register triggers
+      await this.homey.flow.getDeviceTriggerCard('bypass_activated')
+        .registerRunListener((args: FlowCardTriggerArgs, state: EmptyState) => {
+          this.log('Bypass activation triggered');
+          return true;
+        });
 
-    // Register conditions with proper types and null checks
-    this.homey.flow.getConditionCard('is_bypass_active')
-      .registerRunListener(async (args: FlowCardConditionArgs, state: EmptyState) => {
-        return await this.getCapabilityValue('nilan_bypass') === 'true';
-      });
+      this.homey.flow.getDeviceTriggerCard('temperature_threshold')
+        .registerRunListener((args: FlowCardTriggerArgs, state: TemperatureState) => {
+          if (typeof args.threshold === 'undefined') {
+            this.error('Temperature threshold not defined');
+            return false;
+          }
+          this.log(`Temperature threshold check: ${state.temperature} >= ${args.threshold}`);
+          return state.temperature >= args.threshold;
+        });
 
-    this.homey.flow.getConditionCard('fan_mode_is')
-      .registerRunListener(async (args: FlowCardConditionArgs, state: EmptyState) => {
-        if (typeof args.mode === 'undefined') return false;
-        return await this.getCapabilityValue('fan_mode') === args.mode;
-      });
+      // Register conditions
+      this.homey.flow.getConditionCard('is_bypass_active')
+        .registerRunListener(async (args: FlowCardConditionArgs, state: EmptyState) => {
+          const bypassState = await this.getCapabilityValue('nilan_bypass');
+          this.log(`Bypass state check: ${bypassState}`);
+          return bypassState === 'true';
+        });
 
-    // Register actions with proper types
-    this.homey.flow.getActionCard('set_fan_mode')
-      .registerRunListener(async (args: FlowCardActionArgs, state: EmptyState) => {
-        await this.setCapabilityValue('fan_mode', args.mode);
-        return true;
-      });
+      this.homey.flow.getConditionCard('fan_mode_is')
+        .registerRunListener(async (args: FlowCardConditionArgs, state: EmptyState) => {
+          if (typeof args.mode === 'undefined') {
+            this.error('Fan mode not defined in condition');
+            return false;
+          }
+          const currentMode = await this.getCapabilityValue('fan_mode');
+          this.log(`Fan mode check: ${currentMode} === ${args.mode}`);
+          return currentMode === args.mode;
+        });
+
+      // Register actions
+      this.homey.flow.getActionCard('set_fan_mode')
+        .registerRunListener(async (args: FlowCardActionArgs, state: EmptyState) => {
+          this.log(`Setting fan mode to: ${args.mode}`);
+          await this.setCapabilityValue('fan_mode', args.mode);
+          return true;
+        });
+    } catch (error) {
+      this.error('Failed to register flow cards:', error);
+      throw error;
+    }
   }
 
   /**
    * Handle target temperature changes
+   * @param value - New temperature value
    */
-  async onTargetTemperature(value: number) {
-    await this.log('Target temperature changed to:', value);
-    await this.setCapabilityValue('target_temperature', value);
+  async onTargetTemperature(value: number): Promise<void> {
+    try {
+      this.log('Target temperature changed to:', value);
+      await this.setCapabilityValue('target_temperature', value);
+    } catch (error) {
+      this.error('Failed to set target temperature:', error);
+      throw error;
+    }
   }
 
   /**
@@ -173,27 +252,6 @@ class NilanHVACDevice extends Homey.Device {
         this.error('Failed to update device values:', error);
       }
     }, 30000);
-  }
-
-  /**
-   * Initialize all capabilities
-   */
-  private async initializeCapabilities() {
-    // Existing capability checks...
-    if (!this.hasCapability('nilan_bypass')) {
-      await this.addCapability('nilan_bypass');
-      await this.setCapabilityValue('nilan_bypass', false);
-    }
-
-    if (!this.hasCapability('alarm_filter_change')) {
-      await this.addCapability('alarm_filter_change');
-      await this.setCapabilityValue('alarm_filter_change', false);
-    }
-
-    if (!this.hasCapability('measure_humidity')) {
-      await this.addCapability('measure_humidity');
-      await this.setCapabilityValue('measure_humidity', 45); // Default value
-    }
   }
 
   /**
