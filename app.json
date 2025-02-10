@@ -4,14 +4,15 @@
   "version": "1.0.0",
   "compatibility": ">=12.2.0",
   "sdk": 3,
+  "brandColor": "#FF0000",
   "platforms": [
     "local"
   ],
   "name": {
-    "en": "Nilan HVAC"
+    "en": "Nilan & ESPHOME"
   },
   "description": {
-    "en": "Control your Nilan HVAC system"
+    "en": "Connect to mttq broker and communicate with ESPhome that handle modbus"
   },
   "category": [
     "climate"
@@ -36,7 +37,7 @@
         "target_temperature",
         "measure_temperature",
         "thermostat_mode",
-        "fan_speed"
+        "fan_mode"
       ],
       "platforms": [
         "local"
@@ -63,5 +64,42 @@
       ],
       "id": "nilan_hvac"
     }
-  ]
+  ],
+  "capabilities": {
+    "fan_mode": {
+      "type": "enum",
+      "title": {
+        "en": "Fan Mode"
+      },
+      "getable": true,
+      "setable": true,
+      "uiComponent": "picker",
+      "values": [
+        {
+          "id": "auto",
+          "title": {
+            "en": "Auto"
+          }
+        },
+        {
+          "id": "low",
+          "title": {
+            "en": "Low"
+          }
+        },
+        {
+          "id": "medium",
+          "title": {
+            "en": "Medium"
+          }
+        },
+        {
+          "id": "high",
+          "title": {
+            "en": "High"
+          }
+        }
+      ]
+    }
+  }
 }

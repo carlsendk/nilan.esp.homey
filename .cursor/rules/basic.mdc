@@ -23,3 +23,78 @@ Common TypeScript/Homey Issues to Watch:
    - Use strict TypeScript checks
    - Define proper return types
    - Handle all possible capability values
+
+1. **Project Structure**
+   - `/drivers` - Device drivers
+   - `/lib` - Shared utilities and helpers
+   - `/locales` - Translations (at least en.json)
+   - `app.js` - Main app file
+   - `app.json` - App manifest (auto-generated, don't edit!)
+   - `.homeycompose` - For capability compositions
+
+2. **Homey-Specific Patterns**
+   - Extend core Homey classes (`App`, `Driver`, `Device`)
+   - Use appropriate managers (e.g., `ManagerDrivers`, `ManagerFlow`)
+   - Implement proper device capabilities
+   - Handle Flow cards correctly
+   - Follow Homey's lifecycle methods
+
+3. **Code Organization**
+   - Modular driver implementation
+   - Separate concerns between App, Driver, and Device classes
+   - Utility functions in separate files
+   - Clear separation of device communication logic
+
+4. **Type Safety & Documentation**
+   - Use TypeScript when possible
+   - Document all methods with JSDoc comments
+   - Include capability descriptions
+   - Maintain clear README with setup instructions
+
+5. **Error Handling & Logging**
+   - Use `homey.error()` and `homey.log()`
+   - Implement proper device error states
+   - Handle network failures gracefully
+   - Include debug modes for troubleshooting
+
+6. **Testing & Quality**
+   - Test device communication
+   - Validate Flow card functionality
+   - Test capability implementations
+   - Use ESLint with Athom's config
+
+7. **Best Practices**
+   - Implement proper device cleanup in `onDeleted()`
+   - Use capability debouncing when needed
+   - Handle device unavailability
+   - Implement proper pairing workflows
+
+8. **Development Standards**
+   - Follow Homey's naming conventions
+   - Use async/await for device operations
+   - Implement proper capability listeners
+   - Handle device settings correctly
+
+9. **Security & Performance**
+   - No hardcoded credentials
+   - Proper OAuth2 implementation if needed
+   - Optimize polling intervals
+   - Cache device states appropriately
+
+10. **AI-Friendly Coding**
+    - Descriptive variable names
+    - Clear function purposes
+    - Commented complex logic
+    - Structured error messages
+
+11. **File Structure Rules**
+    - NEVER edit app.json directly (it's generated)
+    - ALWAYS edit files in .homeycompose/
+    - Driver-specific settings go in driver.compose.json
+    - App-level settings go in .homeycompose/app.json
+
+12. **Version Control**
+    - Track .homeycompose/ files
+    - Ignore generated app.json
+    - Keep capability versions documented
+    - Document minimum Homey version requirements
