@@ -68,10 +68,7 @@ interface NilanTopics {
       room: string;
     };
     humidity: string;
-    bypass: {
-      open: string;
-      close: string;
-    };
+    bypass: string;
     filter: string;
     fan: {
       inlet: string;
@@ -97,6 +94,14 @@ interface NilanTopics {
   };
 }
 
+interface MQTTError extends Error {
+  code?: string;
+  errno?: number;
+  syscall?: string;
+  address?: string;
+  port?: number;
+}
+
 /**
  * Nilan HVAC Device implementation
  * Handles communication with a Nilan HVAC system via MQTT
@@ -107,20 +112,17 @@ class NilanHVACDevice extends Homey.Device {
   private readonly topics: NilanTopics = {
     values: {
       temperature: {
-        current: 'ap/technical/ventilation/temp/T7_Inlet', // Current temperature
+        current: 'ap/technical/ventilation/temp/T7_Inlet', // Main indoor temperature
         target: 'ap/technical/ventilation/control/TempSet', // Target temperature state
         controller: 'ap/technical/ventilation/temp/T0_Controller',
-        inlet: 'ap/technical/ventilation/temp/T7_Inlet',
         outdoor: 'ap/technical/ventilation/temp/T8_Outdoor',
         exhaust: 'ap/technical/ventilation/temp/T3_Exhaust',
         outlet: 'ap/technical/ventilation/temp/T4_Outlet',
         room: 'ap/technical/ventilation/temp/T15_Room',
+        inlet: '',
       },
       humidity: 'ap/technical/ventilation/humidity/RH',
-      bypass: {
-        open: 'ap/technical/ventilation/output/BypassOpen',
-        close: 'ap/technical/ventilation/output/BypassClose',
-      },
+      bypass: 'ap/technical/ventilation/display/AirBypass/IsOpen',
       filter: 'ap/technical/ventilation/info/AirFilter',
       fan: {
         inlet: 'ap/technical/ventilation/speed/InletSpeed',
@@ -199,6 +201,9 @@ class NilanHVACDevice extends Homey.Device {
     3: 'high',
     4: 'auto',
   };
+
+  private readonly MQTT_RETRY_INTERVAL = 30000; // 30 seconds
+  private mqttReconnectTimer: NodeJS.Timeout | null = null;
 
   /**
    * Device initialization
@@ -339,8 +344,8 @@ class NilanHVACDevice extends Homey.Device {
       if (this.mqttConnected && this.mqttClient) {
         // Convert to device format (multiply by 100)
         const deviceValue = Math.round(value * 100).toString();
-        await this.mqttClient.publish(this.topics.commands.temperature, deviceValue);
-        this.log(`Published to ${this.topics.commands.temperature}: ${deviceValue}`);
+        await this.mqttClient.publish('convert/tempset', deviceValue);
+        this.log(`Published target temperature: ${value}°C (${deviceValue})`);
       }
 
       await this.setCapabilityValue('target_temperature', value);
@@ -418,16 +423,21 @@ class NilanHVACDevice extends Homey.Device {
   }
 
   /**
-   * Initialize MQTT connection
+   * Initialize MQTT connection with retry
    */
   private async initializeMQTT(): Promise<void> {
     try {
       const settings = this.getSettings();
 
-      // Only try to connect if we have MQTT settings
       if (!settings.mqttHost) {
         this.log('No MQTT host configured, skipping connection');
         return;
+      }
+
+      // Clear any existing reconnect timer
+      if (this.mqttReconnectTimer) {
+        this.homey.clearTimeout(this.mqttReconnectTimer);
+        this.mqttReconnectTimer = null;
       }
 
       this.mqttClient = new MQTTClient({
@@ -436,20 +446,72 @@ class NilanHVACDevice extends Homey.Device {
         username: settings.mqttUsername,
         password: settings.mqttPassword,
         clientId: `homey-nilan-${this.getData().id}`,
+        reconnectPeriod: 5000, // Try reconnect every 5 seconds
+        keepalive: 60,
       }, this);
+
+      // Handle connection events
+      this.mqttClient.on('connect', () => {
+        this.mqttConnected = true;
+        this.log('MQTT connected, subscribing to topics...');
+        this.subscribeToTopics().catch((err) => {
+          this.error('Failed to subscribe to topics:', err);
+        });
+      });
+
+      this.mqttClient.on('close', () => {
+        this.mqttConnected = false;
+        this.log('MQTT connection closed');
+        this.scheduleReconnect();
+      });
+
+      this.mqttClient.on('error', (error: MQTTError) => {
+        this.error('MQTT error:', error);
+        this.scheduleReconnect();
+      });
 
       this.mqttClient.on('message', this.handleMessage.bind(this));
 
       await this.mqttClient.connect();
-      this.mqttConnected = true;
-      this.log('MQTT connected, subscribing to topics...');
-      await this.subscribeToTopics();
-      this.log('Successfully subscribed to all topics');
+      this.log('MQTT connection initialized');
     } catch (error) {
       this.mqttConnected = false;
       this.error('MQTT initialization failed:', error);
-      throw error;
+      this.scheduleReconnect();
     }
+  }
+
+  /**
+   * Schedule MQTT reconnection
+   */
+  private scheduleReconnect(): void {
+    if (!this.mqttReconnectTimer) {
+      this.log(`Scheduling MQTT reconnect in ${this.MQTT_RETRY_INTERVAL / 1000} seconds`);
+      this.mqttReconnectTimer = this.homey.setTimeout(() => {
+        this.mqttReconnectTimer = null;
+        this.log('Attempting MQTT reconnection...');
+        this.initializeMQTT().catch((err) => {
+          this.error('MQTT reconnection failed:', err);
+        });
+      }, this.MQTT_RETRY_INTERVAL);
+    }
+  }
+
+  /**
+   * Clean up MQTT resources
+   */
+  private async disconnectMQTT(): Promise<void> {
+    // Clear reconnect timer first
+    if (this.mqttReconnectTimer) {
+      this.homey.clearTimeout(this.mqttReconnectTimer);
+      this.mqttReconnectTimer = null;
+    }
+
+    if (this.mqttClient) {
+      await this.mqttClient.disconnect();
+      this.mqttClient = null;
+    }
+    this.mqttConnected = false;
   }
 
   /**
@@ -557,23 +619,22 @@ class NilanHVACDevice extends Homey.Device {
             break;
           }
 
-          // Binary states
-          case this.topics.values.bypass.open:
-          case this.topics.values.bypass.close: {
-            const isOpen = topic.endsWith('open') ? value === '1' : value === '0';
-            await this.setCapabilityValueSafe('nilan_bypass', isOpen);
+          // Bypass state
+          case this.topics.values.bypass: {
+            const bypassActive = value === '1'; // 1 = active, 0 = inactive
+            await this.setCapabilityValueSafe('nilan_bypass', bypassActive);
+            if (bypassActive) {
+              await this.homey.flow.getDeviceTriggerCard('bypass_activated').trigger(this, {}, {});
+            }
             break;
           }
 
-          // Filter status
+          // Filter status (inverted logic)
           case this.topics.values.filter: {
-            const filterChange = value !== '0';
+            const filterChange = value === '1'; // 1 = change needed, 0 = ok
             await this.setCapabilityValueSafe('alarm_filter_change', filterChange);
             if (filterChange) {
-              this.log('Filter change required!');
-              // Trigger flow card
-              await this.homey.flow.getDeviceTriggerCard('filter_change_required')
-                .trigger(this, {}, {});
+              await this.homey.flow.getDeviceTriggerCard('filter_change_required').trigger(this, {}, {});
             }
             break;
           }
@@ -600,10 +661,10 @@ class NilanHVACDevice extends Homey.Device {
           // Target temperature state
           case this.topics.values.temperature.target: {
             const temp = parseFloat(value);
-            if (!Number.isNaN(temp)) { // Use Number.isNaN instead of isNaN
-              // Convert from device format (divide by 100)
-              const targetTemp = Math.round(temp * 0.01 * 10) / 10; // Round to 1 decimal
+            if (!Number.isNaN(temp)) {
+              const targetTemp = Math.round(temp * 0.01 * 10) / 10; // Convert from device format (÷100)
               await this.setCapabilityValueSafe('target_temperature', targetTemp);
+              this.log(`Updated target temperature to ${targetTemp}°C`);
             }
             break;
           }
@@ -640,16 +701,6 @@ class NilanHVACDevice extends Homey.Device {
   }
 
   /**
-   * Disconnect from MQTT broker
-   */
-  private async disconnectMQTT() {
-    if (this.mqttClient) {
-      await this.mqttClient.disconnect();
-      this.mqttClient = null;
-    }
-  }
-
-  /**
    * Device deleted handler
    */
   async onDeleted() {
@@ -680,27 +731,22 @@ class NilanHVACDevice extends Homey.Device {
    */
   private getTemperatureCapability(topic: string): string {
     if (topic.includes('T7_Inlet')) {
-      return 'measure_temperature'; // Main temperature
+      return 'measure_temperature'; // Main indoor temperature
     }
     if (topic.includes('T8_Outdoor')) {
       return 'measure_temperature_outdoor';
     }
-    if (topic.includes('T3_Exhaust')) {
+    if (topic.includes('T3_Exhaust') || topic.includes('T4_Outlet')) {
       return 'measure_temperature_exhaust';
     }
-    if (topic.includes('T4_Outlet')) {
-      return 'measure_temperature_exhaust'; // Outlet is also exhaust temperature
-    }
-    if (topic.includes('T15_Room')) {
-      return 'measure_temperature'; // Room temperature maps to main temperature
-    }
-    if (topic.includes('T0_Controller')) {
-      return 'measure_temperature'; // Controller temp also maps to main temperature
+    // Room and controller temps are additional readings, not main temperature
+    if (topic.includes('T15_Room') || topic.includes('T0_Controller')) {
+      this.log(`Additional temperature reading from ${topic}, not mapping to main temperature`);
+      return 'measure_temperature_exhaust'; // or we could skip these readings
     }
 
-    // Log unhandled temperature topic but don't throw
-    this.log(`Unmapped temperature topic: ${topic}, defaulting to measure_temperature`);
-    return 'measure_temperature';
+    this.log(`Unmapped temperature topic: ${topic}`);
+    return 'measure_temperature_exhaust'; // Default to exhaust to avoid confusion with main temp
   }
 }
 
